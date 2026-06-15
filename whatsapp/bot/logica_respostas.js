@@ -567,6 +567,22 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
         return rows[0] || null;
     }
 
+    async function obterOuCriarAlunoPorProntuario(c, prontuario) {
+        const alunoExistente = await buscarAlunoPorProntuario(c, prontuario);
+        if (alunoExistente) return { aluno: alunoExistente, criado: false };
+
+        const { rows } = await c.query(
+            `INSERT INTO aluno (prontuario)
+             VALUES ($1)
+             ON CONFLICT (prontuario) DO NOTHING
+             RETURNING *`,
+            [prontuario]
+        );
+
+        const aluno = rows[0] || await buscarAlunoPorProntuario(c, prontuario);
+        return { aluno, criado: true };
+    }
+
     // Verifica se dois telefones sao equivalentes (compara os ultimos 9 digitos)
     function telefonesEquivalentes(tel1, tel2) {
         const d1 = apenasDigitos(tel1);
@@ -580,14 +596,15 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
     }
 
     async function vincularAlunoContato(c, { prontuario, telefone }) {
-        const aluno = await buscarAlunoPorProntuario(c, prontuario);
-        if (!aluno) return { ok: false, motivo: "NAO_ENCONTRADO" };
-
         // Protecao: nao salvar LIDs como telefone
         if (!eTelefoneValido(telefone)) {
             logger.warn(`[LID] Tentativa de vincular com LID em vez de telefone: ${telefone}`);
             return { ok: false, motivo: "TELEFONE_INVALIDO" };
         }
+
+        const { aluno, criado } = await obterOuCriarAlunoPorProntuario(c, prontuario);
+        if (!aluno) return { ok: false, motivo: "ERRO_CRIAR_ALUNO" };
+        if (criado) logger.info(`[CADASTRO] Novo aluno criado pelo WhatsApp: prontuario=${prontuario}`);
 
         // Busca TODOS os contatos vinculados (sem LIMIT 1) para permitir múltiplos IDs (ex: LID e Número)
         const { rows } = await c.query(
@@ -606,18 +623,18 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
                     `INSERT INTO contato (aluno_id, telefone) VALUES ($1,$2)`,
                     [aluno.id, telefone]
                 );
-                return { ok: true, alunoId: aluno.id, aluno, migrado: true };
+                return { ok: true, alunoId: aluno.id, aluno, migrado: true, criado };
             }
 
             // Já existe esse ID. Tudo certo.
-            return { ok: true, alunoId: aluno.id, aluno, migrado: false };
+            return { ok: true, alunoId: aluno.id, aluno, migrado: false, criado };
         }
 
         // Primeiro vínculo
         await c.query(
             `INSERT INTO contato (aluno_id, telefone) VALUES ($1,$2)`, [aluno.id, telefone]
         );
-        return { ok: true, alunoId: aluno.id, aluno };
+        return { ok: true, alunoId: aluno.id, aluno, criado };
     }
 
     async function salvarPreferenciasDias(c, alunoId, dias = []) {
