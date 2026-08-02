@@ -344,6 +344,7 @@ function criarTexto(texto) {
     return { text: texto };
 }
 
+// no lugar de string fazia, o criarBotoes aceita null como parâmetro
 function criarBotoes(texto, rodape, opcoes = []) {
     // Gera texto com opções numeradas
     // opcoes = [{ id: 'sim', texto: 'Sim' }, ...]
@@ -1026,7 +1027,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
             }
 
             if (usuario.etapa === "AGUARDANDO_CONSENTIMENTO") {
-                return criarBotoes("Quando quiser começar, é só clicar abaixo.", "", [{ id: "continuar_cadastro", texto: "Continuar" }]);
+                return criarBotoes("Quando quiser começar, é só clicar abaixo.", null, [{ id: "continuar_cadastro", texto: "Continuar" }]);
             }
 
             if (usuario.etapa === "NOVO") {
@@ -1057,7 +1058,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
                             "Prontuário não encontrado na base.\n\n" +
                             "Se você acha que deveria estar cadastrado, procure a sala do *3° Redes* para regularizar.\n\n" +
                             "Envie seu *prontuário correto* para tentar novamente.",
-                            "", [{ id: "continuar_cadastro", texto: "Tentar De Novo" }]
+                            null, [{ id: "continuar_cadastro", texto: "Tentar De Novo" }]
                         );
                     }
                     if (res.motivo === "JA_VINCULADO") return criarTexto("Prontuário já vinculado a outro número.");
@@ -1298,7 +1299,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
             // Se falou outra coisa, ignora ou repete
             return criarBotoes(
                 "Por favor, confirme se deseja cancelar.", 
-                null, // teste com null, depois coloco string vazia se não funcionar
+                null, 
                 [{ id: "confirmar_cancelamento", texto: "Sim, Cancelar" }, { id: "cancelar_abortar", texto: "Não" }, { id: "cancelar_outro", texto: "Outro dia" }]
             );
         }
@@ -1349,7 +1350,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
 
             return criarBotoes(
                 "Por favor, confirme se deseja cancelar as refeições já pedidas.",
-                "Cancelamento em Lote",
+                null,
                 [ { id: "cancelar_todos", texto: "Cancelar todos" }, { id: "nao_cancelar", texto: "Não cancelar" } ]
             );
         }
@@ -1403,7 +1404,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
             if (metodo === "DIRETO") {
                 return criarBotoes(
                     `Cancelar ${nomeRefeicao} de *${dataStr}*?`,
-                    "Confirmação",
+                    null,
                     [{ id: "confirmar_cancelamento", texto: "Sim, Cancelar" }, { id: "cancelar_abortar", texto: "Não" }, { id: "cancelar_outro", texto: "Outro dia" }]
                 );
             }
@@ -1424,7 +1425,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
 
                 return [
                     { image: imgBuffer, caption: "📧 Este é o e-mail que será enviado ao CAE:" },
-                    criarBotoes(`Cancelar ${nomeRefeicao} de *${dataStr}*?`, "Confirmação", [
+                    criarBotoes(`Cancelar ${nomeRefeicao} de *${dataStr}*?`, null, [
                                 { id: "confirmar_cancelamento", texto: "Sim, Enviar" },
                                 { id: "cancelar_abortar", texto: "Não" },
                                 { id: "cancelar_outro", texto: "Outro dia" }])
@@ -1433,7 +1434,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
                 logger.warn(`[PREVIEW] Falha ao gerar imagem: ${erroImg.message}`);
                 return criarBotoes(
                     `Cancelar ${nomeRefeicao} de *${dataStr}*?\n\n_Aluno: ${alunoAtual.nome} | ${prontCompleto}_`,
-                    "Confirmação",
+                    null,
                     [{ id: "confirmar_cancelamento", texto: "Sim, Enviar" }, { id: "cancelar_abortar", texto: "Não" }, { id: "cancelar_outro", texto: "Outro dia" }]
                 );
             }
@@ -1635,7 +1636,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
                     });
                     return criarBotoes(
                         `Robô pausado. ✅\n\nNo entanto, você já tem pedidos feitos nesta semana:\n${strDias}\n\nQuer cancelar essas refeições já marcadas?`,
-                        "Cancelamento em Lote",
+                        null,
                         [
                             { id: "cancelar_todos", texto: "Sim, cancelar todos" },
                             { id: "nao_cancelar", texto: "Não cancelar" }
