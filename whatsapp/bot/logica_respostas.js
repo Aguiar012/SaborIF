@@ -1268,7 +1268,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
                     });
                     return criarTexto(
                         `Cancelamento do ${refeicao.titulo.toLowerCase()} registrado para ${dataStr} ` +
-                        "(o pedido automatico nao sera feito)."
+                        "(o pedido automático não será feito)."
                     );
                 } else {
                     const resEmail = await enviarEmailCancelamento({
@@ -1298,6 +1298,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
             // Se falou outra coisa, ignora ou repete
             return criarBotoes(
                 "Por favor, confirme se deseja cancelar.",
+                "Confirmação",
                 [{ id: "confirmar_cancelamento", texto: "Sim, Cancelar" }, { id: "cancelar_abortar", texto: "Não" }, { id: "cancelar_outro", texto: "Outro dia" }]
             );
         }
