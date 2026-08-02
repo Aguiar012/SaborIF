@@ -5,6 +5,7 @@ const { Pool } = pkg;
 import nodemailer from "nodemailer";
 import { criarAssistenteIA } from "./inteligencia_artificial.js";
 import { gerarImagemEmailCancelamento } from "./renderizar_email.js";
+import { detectarRefeicao, obterRefeicao } from "./refeicoes.js";
 
 function apenasDigitos(s = "") { return (s || "").replace(/\D/g, ""); }
 
@@ -235,7 +236,7 @@ function obterSegundaDaSemana(agora = new Date()) {
 
 function gerarCabecalho(aluno, pratoAtual, dadosSemana = null) {
     if (!aluno) {
-        return "*IFSP Pirituba - Almoço*\n\n";
+        return "*IFSP Pirituba - Refeições*\n\n";
     }
 
     const nome = aluno.nome?.split(" ")[0] || "Aluno";
@@ -310,12 +311,16 @@ function gerarCabecalho(aluno, pratoAtual, dadosSemana = null) {
         if (diasNaoVou.length) tabelaSemana += `❌ *Não Vai:* ${diasNaoVou.join(", ")}\n`;
         if (diasErro.length) tabelaSemana += `⚠️ *Sem Dados:* ${diasErro.join(", ")}\n`;
 
+        if (dadosSemana.diasJantar?.length) {
+            tabelaSemana += `🌙 *Jantar:* ${formatarDiasHumanos(dadosSemana.diasJantar)}\n`;
+        }
+
         tabelaSemana += "\n";
     }
 
 
     return (
-        `*IFSP Pirituba - Almoço*\n` +
+        `*IFSP Pirituba - Refeições*\n` +
         `Oi ${nome}!\n` +
         (linhaPrato ? `${linhaPrato}\n` : "") +
         tabelaSemana +
@@ -637,13 +642,17 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
         return { ok: true, alunoId: aluno.id, aluno, criado };
     }
 
-    async function salvarPreferenciasDias(c, alunoId, dias = []) {
-        await c.query(`DELETE FROM preferencia_dia WHERE aluno_id=$1`, [alunoId]);
-        if (!dias.length) return;
-        const valores = dias.map((d, i) => `($1,$${i + 2})`).join(",");
+    async function salvarPreferenciasDias(c, alunoId, dias = [], refeicao = "almoco") {
+        const refeicaoNormalizada = obterRefeicao(refeicao).nome;
         await c.query(
-            `INSERT INTO preferencia_dia (aluno_id, dia_semana) VALUES ${valores}`,
-            [alunoId, ...dias]
+            `DELETE FROM preferencia_dia WHERE aluno_id=$1 AND refeicao=$2`,
+            [alunoId, refeicaoNormalizada]
+        );
+        if (!dias.length) return;
+        const valores = dias.map((d, i) => `($1,$${i + 3},$2)`).join(",");
+        await c.query(
+            `INSERT INTO preferencia_dia (aluno_id, dia_semana, refeicao) VALUES ${valores}`,
+            [alunoId, refeicaoNormalizada, ...dias]
         );
     }
 
@@ -677,9 +686,13 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
         await c.query(`UPDATE aluno SET ativo=$2 WHERE id=$1`, [alunoId, !!ativo]);
     }
 
-    async function obterDiasPreferidos(c, alunoId) {
+    async function obterDiasPreferidos(c, alunoId, refeicao = "almoco") {
+        const refeicaoNormalizada = obterRefeicao(refeicao).nome;
         const { rows } = await c.query(
-            `SELECT dia_semana FROM preferencia_dia WHERE aluno_id = $1 ORDER BY dia_semana`, [alunoId]
+            `SELECT dia_semana FROM preferencia_dia
+              WHERE aluno_id = $1 AND refeicao = $2
+              ORDER BY dia_semana`,
+            [alunoId, refeicaoNormalizada]
         );
         return rows.map(r => r.dia_semana);
     }
@@ -693,7 +706,7 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
 
     async function buscarUltimoPedido(c, alunoId) {
         const { rows } = await c.query(
-            `SELECT dia_pedido, motivo FROM pedido
+            `SELECT dia_pedido, motivo, refeicao FROM pedido
         WHERE aluno_id = $1 AND motivo NOT ILIKE '%anteriormente%' AND motivo NOT LIKE '%Final%'
         ORDER BY dia_pedido DESC, id DESC LIMIT 1`, [alunoId]
         );
@@ -702,7 +715,7 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
 
     async function buscarUltimosPedidos(c, alunoId) {
         const { rows } = await c.query(
-            `SELECT dia_pedido, motivo FROM pedido
+            `SELECT dia_pedido, motivo, refeicao FROM pedido
         WHERE aluno_id = $1 AND dia_pedido >= (CURRENT_DATE - INTERVAL '7 days')
           AND motivo NOT ILIKE '%anteriormente%' AND motivo NOT LIKE '%Final%'
         ORDER BY dia_pedido DESC, id DESC`, [alunoId]
@@ -721,7 +734,7 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
         const sexta = new Date(segunda);
         sexta.setDate(segunda.getDate() + 4);
         const { rows } = await c.query(
-            `SELECT dia_pedido, motivo FROM pedido
+            `SELECT dia_pedido, motivo, refeicao FROM pedido
              WHERE aluno_id = $1
                AND dia_pedido >= $2
                AND dia_pedido <= $3
@@ -787,7 +800,8 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
             "5. Bloquear Pratos\n" +
             "6. Desbloquear Pratos\n" +
             "7. Ativar/Desativar\n" +
-            "8. Guia / Ajuda";
+            "8. Guia / Ajuda\n" +
+            "9. Configurar Jantar";
 
         return { text: menu };
     }
@@ -825,11 +839,17 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
     );
 
     // --- Texto de Dias da Semana ---
-    function menuDiasSemana(motivo) {
-        return criarTexto(
-            (motivo || "Escolha os dias da semana:") + "\n\n" +
-            "Em quais dias você almoça no IFSP?\n" +
-            "O bot vai pedir seu almoço *automaticamente* nesses dias.\n\n" +
+function menuDiasSemana(motivo, refeicao = "almoco") {
+    const eJantar = obterRefeicao(refeicao).nome === "jantar";
+    const pergunta = eJantar
+        ? "Em quais dias você janta no IFSP?"
+        : "Em quais dias você almoça no IFSP?";
+    const nomeRefeicao = eJantar ? "jantar" : "almoço";
+
+    return criarTexto(
+        (motivo || "Escolha os dias da semana:") + "\n\n" +
+            `${pergunta}\n` +
+            `O bot vai pedir seu ${nomeRefeicao} *automaticamente* nesses dias.\n\n` +
             "Escreva os dias separados por vírgula:\n\n" +
             "Dias válidos: seg, ter, qua, qui, sex"
         );
@@ -865,11 +885,17 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
                 let ds = null;
                 if (a) {
                     try {
-                        const [pedidosSemana, diasPreferidos] = await Promise.all([
+                        const [pedidosSemana, diasAlmoco, diasJantar] = await Promise.all([
                             buscarPedidosSemanaAtual(c, a.id),
-                            obterDiasPreferidos(c, a.id)
+                            obterDiasPreferidos(c, a.id, "almoco"),
+                            obterDiasPreferidos(c, a.id, "jantar")
                         ]);
-                        ds = { pedidos: pedidosSemana, diasPreferidos };
+                        ds = {
+                            pedidos: pedidosSemana,
+                            diasPreferidos: diasAlmoco,
+                            diasAlmoco,
+                            diasJantar,
+                        };
                     } catch (e) {
                         logger.error(`[DB] Erro ao buscar dados da semana: ${e}`);
                         // Continua sem histórico se der erro, melhor que travar.
@@ -912,11 +938,11 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
             return menuPrincipalInterativo(aluno || null, pratoAtual, dadosSemana);
         }
 
-        // -- Atalhos Numéricos do Menu (1-8) --
+        // -- Atalhos Numericos do Menu (1-9) --
         const MAPA_NUMEROS = {
             "1": "cancelar", "2": "status", "3": "historico",
             "4": "preferencia", "5": "bloquear", "6": "desbloquear",
-            "7": null, "8": "guia" // 7 é tratado como toggle abaixo
+            "7": null, "8": "guia", "9": "jantar" // 7 e tratado como toggle abaixo
         };
         if (textoNorm === "7" && usuario.etapa === "MENU_PRINCIPAL") {
             // Toggle: se está ativo → desativa, se inativo → ativa
@@ -935,13 +961,15 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
 
             const bloqueiosUsuario = await conectarBanco(c => obterBloqueios(c, aluno.id));
 
-            const diasTxt = dadosSemana?.diasPreferidos?.length ? formatarDiasHumanos(dadosSemana.diasPreferidos) : "nenhum";
+            const diasAlmocoTxt = dadosSemana?.diasAlmoco?.length ? formatarDiasHumanos(dadosSemana.diasAlmoco) : "nenhum";
+            const diasJantarTxt = dadosSemana?.diasJantar?.length ? formatarDiasHumanos(dadosSemana.diasJantar) : "nenhum";
             const bloqueiosTxt = bloqueiosUsuario.length ? bloqueiosUsuario.join(", ") : "nenhum";
 
             const msg = gerarCabecalho(aluno, pratoAtual, dadosSemana) +
                 "*Status do seu cadastro*\n\n" +
                 `• Cadastro ativo: *${aluno.ativo ? "Sim" : "Não"}*\n` +
-                `• Dias cadastrados: *${diasTxt}*\n` +
+                `• Dias de almoço: *${diasAlmocoTxt}*\n` +
+                `• Dias de jantar: *${diasJantarTxt}*\n` +
                 `• Pratos bloqueados: *${bloqueiosTxt}*\n`;
 
             return criarTexto(msg);
@@ -1037,6 +1065,17 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
             await conectarBanco(c => salvarPreferenciasDias(c, alunoAtual.id, dias));
             atualizarUsuario(chaveUsuario, { etapa: "MENU_PRINCIPAL", dados_temporarios: {} });
             return menuPrincipalInterativo(alunoAtual, pratoAtual, dadosSemana);
+        }
+
+        if (usuario.etapa === "DEFINIR_DIAS_JANTAR") {
+            const dias = interpretarListaDias(texto);
+            if (!dias.length) return criarTexto("Selecione pelo menos um dia.");
+            await conectarBanco(c => salvarPreferenciasDias(c, alunoAtual.id, dias, "jantar"));
+            atualizarUsuario(chaveUsuario, { etapa: "MENU_PRINCIPAL", dados_temporarios: {} });
+            return criarTexto(
+                `Jantar configurado para: *${formatarDiasHumanos(dias)}*.\n\n` +
+                "O bot fara esses pedidos no horario do jantar."
+            );
         }
 
         if (usuario.etapa === "DEFINIR_BLOQUEIOS") {
@@ -1342,6 +1381,19 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
                  return criarTexto("Não entendi qual dia cancelar. Use 'cancelar quarta', 'cancelar amanhã' ou apenas 'cancelar' para ver o menu.");
             }
             return await processarFluxoCancelamentoDia(dataAlvo);
+        }
+
+        if (
+            textoNorm === "jantar" ||
+            textoNorm === "janta" ||
+            ((textoNorm.startsWith("preferencia") || textoNorm.startsWith("dias")) &&
+                detectarRefeicao(textoNorm).nome === "jantar")
+        ) {
+            atualizarUsuario(chaveUsuario, { etapa: "DEFINIR_DIAS_JANTAR", dados_temporarios: {} });
+            return menuDiasSemana(
+                "Selecione os dias da semana em que voce janta:",
+                "jantar"
+            );
         }
 
         if (textoNorm.startsWith("preferencia") || textoNorm === "dias") {
