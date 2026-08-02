@@ -1,5 +1,5 @@
 const REFEICOES = {
-    almoco: { nome: "almoco", titulo: "Almoco", codigoSica: "1" },
+    almoco: { nome: "almoco", titulo: "Almoço", codigoSica: "1" },
     jantar: { nome: "jantar", titulo: "Jantar", codigoSica: "2" },
 };
 

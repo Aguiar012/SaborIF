@@ -5,6 +5,7 @@
 import satori from "satori";
 import { Resvg } from "@resvg/resvg-js";
 import fs from "fs";
+import { obterRefeicao } from "./refeicoes.js";
 
 // Carrega fonte uma vez (Arial ou fallback para qualquer .ttf disponível no sistema)
 let fontData = null;
@@ -63,12 +64,13 @@ function carregarFonteBold() {
 
 /**
  * Gera uma imagem PNG do preview do email de cancelamento.
- * @param {{ nome: string, prontuarioCompleto: string, prontuarioNumerico: string, diaSemana: string, data: string }} dados
+ * @param {{ nome: string, prontuarioCompleto: string, prontuarioNumerico: string, diaSemana: string, data: string, refeicao?: string }} dados
  * @returns {Promise<Buffer>} Buffer do PNG
  */
-export async function gerarImagemEmailCancelamento({ nome, prontuarioCompleto, prontuarioNumerico, diaSemana, data }) {
+export async function gerarImagemEmailCancelamento({ nome, prontuarioCompleto, prontuarioNumerico, diaSemana, data, refeicao = "almoco" }) {
     const regular = carregarFonte();
     const bold = carregarFonteBold();
+    const tituloRefeicao = obterRefeicao(refeicao).titulo;
 
     // Layout JSX-like que replica o HTML do email real
     const elemento = {
@@ -107,7 +109,7 @@ export async function gerarImagemEmailCancelamento({ nome, prontuarioCompleto, p
                                     type: "div",
                                     props: {
                                         style: { color: "#fff", fontSize: "18px", fontWeight: "bold" },
-                                        children: "Solicitação de Cancelamento de Almoço",
+                                        children: `Solicitação de Cancelamento de ${tituloRefeicao}`,
                                     },
                                 },
                             },
