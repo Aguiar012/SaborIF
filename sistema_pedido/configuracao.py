@@ -15,6 +15,9 @@ MODO_TESTE = os.getenv('MODO_TESTE', 'false').strip().lower() in {
     '1', 'true', 'sim', 'yes'
 }
 PRONTUARIO_TESTE = os.getenv('PRONTUARIO_TESTE', '').strip()
+SIMULAR_PEDIDO = os.getenv('SIMULAR_PEDIDO', 'false').strip().lower() in {
+    '1', 'true', 'sim', 'yes'
+}
 
 # URL do site do refeitório onde os pedidos são feitos
 URL_PRINCIPAL = 'http://200.133.203.133/home'

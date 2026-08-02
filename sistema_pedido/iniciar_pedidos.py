@@ -5,7 +5,8 @@ import logging
 from datetime import datetime
 from sistema_pedido.configuracao import (
     FUSO_HORARIO, ATRASO_MAXIMO, TENTATIVAS_PEDIDO, TEMPO_ESPERA_ERRO, 
-    MODO_TESTE, PRONTUARIO_TESTE, REFEICAO_ATUAL, validar_configuracao
+    MODO_TESTE, PRONTUARIO_TESTE, REFEICAO_ATUAL, SIMULAR_PEDIDO,
+    validar_configuracao
 )
 from sistema_pedido.utils import data_alvo_pedido, verificar_bloqueios, DIAS_SEMANA_PT
 from sistema_pedido.cliente_site import (
@@ -33,6 +34,10 @@ def principal():
             "🧪 MODO TESTE: somente o prontuario %s sera processado.",
             PRONTUARIO_TESTE,
         )
+    if SIMULAR_PEDIDO:
+        logging.warning(
+            "🧪 SIMULACAO: nenhum pedido, historico, e-mail ou WhatsApp sera enviado."
+        )
     
     # Cria uma sessão HTTP para manter cookies (importante para o CSRF token)
     sessao = requests.Session()
@@ -47,7 +52,11 @@ def principal():
     # 2. Atualiza o cardápio no banco e descobre o prato do DIA ALVO DO PEDIDO
     # IMPORTANTE: passa data_pedido para buscar o prato correto (do dia que o aluno vai comer)
     # e não o prato de hoje (que pode ser diferente, ex: sexta pedindo para segunda)
-    texto_prato_dia = buscar_cardapio_site(sessao, data_pedido)
+    texto_prato_dia = (
+        "(cardapio nao consultado na simulacao)"
+        if SIMULAR_PEDIDO
+        else buscar_cardapio_site(sessao, data_pedido)
+    )
 
     logging.info(f"🍛 Texto usado para checar bloqueios (prato de {data_pedido}): {texto_prato_dia}")
 
@@ -68,6 +77,17 @@ def principal():
     logging.info(
         f"👥 Encontrados {len(alunos)} alunos para processar no {nome_refeicao}."
     )
+
+    if SIMULAR_PEDIDO:
+        for aluno in alunos:
+            logging.info(
+                "🧪 SIMULARIA %s para %s (tipo SICA %s).",
+                nome_refeicao,
+                aluno['prontuario'],
+                REFEICAO_ATUAL.codigo_sica,
+            )
+        logging.warning("🧪 Simulacao concluida sem enviar pedidos.")
+        return
 
     for aluno in alunos:
         id_aluno = aluno['id']

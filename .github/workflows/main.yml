@@ -20,6 +20,11 @@ on:
         description: PT usado no teste (obrigatorio no modo de teste)
         required: false
         type: string
+      simular_pedido:
+        description: Simular sem enviar pedido ao refeitorio
+        required: true
+        default: true
+        type: boolean
   schedule:
     - cron: '0 09 * * 1-5'
     - cron: '0 16 * * 1-5'
@@ -38,6 +43,7 @@ jobs:
       REFEICAO: ${{ github.event_name == 'workflow_dispatch' && inputs.refeicao || (github.event.schedule == '0 16 * * 1-5' && 'jantar' || 'almoco') }}
       MODO_TESTE: ${{ github.event_name == 'workflow_dispatch' && inputs.modo_teste || false }}
       PRONTUARIO_TESTE: ${{ github.event_name == 'workflow_dispatch' && inputs.prontuario_teste || '' }}
+      SIMULAR_PEDIDO: ${{ github.event_name == 'workflow_dispatch' && inputs.simular_pedido || false }}
     steps:
       - uses: actions/checkout@v7
 
@@ -53,6 +59,7 @@ jobs:
         run: |
           echo "Refeicao: $REFEICAO"
           echo "Modo de teste: $MODO_TESTE"
+          echo "Simulacao sem pedido: $SIMULAR_PEDIDO"
 
       - name: Executar pedidos
         env:
