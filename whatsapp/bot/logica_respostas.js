@@ -1297,8 +1297,8 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
 
             // Se falou outra coisa, ignora ou repete
             return criarBotoes(
-                "Por favor, confirme se deseja cancelar.",
-                "Confirmação",
+                "Por favor, confirme se deseja cancelar.", 
+                null, // teste com null, depois coloco string vazia se não funcionar
                 [{ id: "confirmar_cancelamento", texto: "Sim, Cancelar" }, { id: "cancelar_abortar", texto: "Não" }, { id: "cancelar_outro", texto: "Outro dia" }]
             );
         }
