@@ -5,7 +5,7 @@ import logging
 from datetime import datetime
 from sistema_pedido.configuracao import (
     FUSO_HORARIO, ATRASO_MAXIMO, TENTATIVAS_PEDIDO, TEMPO_ESPERA_ERRO, 
-    validar_configuracao
+    REFEICAO_ATUAL, validar_configuracao
 )
 from sistema_pedido.utils import data_alvo_pedido, verificar_bloqueios, DIAS_SEMANA_PT
 from sistema_pedido.cliente_site import (
@@ -23,6 +23,8 @@ def principal():
     """Função principal que gerencia todo o processo de pedidos."""
     validar_configuracao()
     agora = datetime.now(FUSO_HORARIO)
+    nome_refeicao = REFEICAO_ATUAL.nome
+    titulo_refeicao = REFEICAO_ATUAL.titulo
     
     # Cria uma sessão HTTP para manter cookies (importante para o CSRF token)
     sessao = requests.Session()
@@ -44,9 +46,11 @@ def principal():
     # Lista para guardar o relatório de execução
     detalhes_execucao = []
     
-    # 3. Busca alunos que querem almoçar nesse dia da semana
+    # 3. Busca alunos que querem essa refeicao nesse dia da semana
     alunos = buscar_alunos_para_dia(dia_semana_iso)
-    logging.info(f"👥 Encontrados {len(alunos)} alunos para processar.")
+    logging.info(
+        f"👥 Encontrados {len(alunos)} alunos para processar no {nome_refeicao}."
+    )
 
     for aluno in alunos:
         id_aluno = aluno['id']
@@ -85,7 +89,7 @@ def principal():
             if telefone_aluno:
                 data_fmt = data_pedido.strftime('%d/%m')
                 msg_aluno = (
-                    f"Oi! Seu almoço de *{nome_dia_semana}* ({data_fmt}) "
+                    f"Oi! Seu {nome_refeicao} de *{nome_dia_semana}* ({data_fmt}) "
                     f"não foi pedido porque o prato (*{texto_prato_dia}*) "
                     f"contém item da sua lista de exclusão: *{motivo_bloqueio}*."
                 )
@@ -104,7 +108,9 @@ def principal():
         for tentativa in range(1, TENTATIVAS_PEDIDO + 1):
             logging.info(f"🔄 Tentativa {tentativa} para {prontuario}...")
             try:
-                sucesso_pedido, mensagem_resultado = realizar_pedido(sessao, prontuario)
+                sucesso_pedido, mensagem_resultado = realizar_pedido(
+                    sessao, prontuario, REFEICAO_ATUAL
+                )
                 if sucesso_pedido:
                     logging.info(f"✅ Sucesso para {prontuario}: {mensagem_resultado}")
                     break
@@ -128,7 +134,7 @@ def principal():
         registrar_historico_pedido(id_aluno, data_pedido, motivo_log)
 
     # 8. Gera Relatório por E-mail
-    linhas_email = [f'Relatório Auto-Almoço — {agora.strftime("%d/%m/%Y")}']
+    linhas_email = [f'Relatório Auto-{titulo_refeicao} — {agora.strftime("%d/%m/%Y")}']
     linhas_email.append(f'Data-alvo: {data_pedido.strftime("%d/%m/%Y")} ({nome_dia_semana})')
     
     total_sucesso = sum(1 for _, ok, _, _, _, _ in detalhes_execucao if ok)
@@ -140,7 +146,7 @@ def principal():
         status_txt = 'OK ' if ok else 'FALHOU'
         linhas_email.append(f'{pront} | {status_txt} | {ini}→{fim} | {tent} | {msg}')
         
-    enviar_email('Relatório Auto-Almoço', '\n'.join(linhas_email))
+    enviar_email(f'Relatório Auto-{titulo_refeicao}', '\n'.join(linhas_email))
 
     # 9. Envia Alerta no WhatsApp (apenas erros relevantes)
     lista_erros = [
@@ -150,7 +156,7 @@ def principal():
     
     if lista_erros:
         corpo_zap = []
-        corpo_zap.append('🚨 *Falhas no Auto-Almoço:*')
+        corpo_zap.append(f'🚨 *Falhas no Auto-{titulo_refeicao}:*')
         corpo_zap.append(agora.strftime('%d/%m %H:%M'))
         corpo_zap.append(f'Prato: {texto_prato_dia}')
         corpo_zap.append('')
@@ -176,7 +182,7 @@ if __name__ == '__main__':
             from sistema_pedido.configuracao import FUSO_HORARIO
             agora = datetime.now(FUSO_HORARIO).strftime('%d/%m %H:%M')
             notificar_administradores(
-                f"💀 *ERRO FATAL no Auto-Almoço*\n"
+                f"💀 *ERRO FATAL no Auto-{REFEICAO_ATUAL.titulo}*\n"
                 f"{agora}\n\n"
                 f"O script quebrou antes de terminar:\n"
                 f"```{str(e)[:500]}```"

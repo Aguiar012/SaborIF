@@ -1,8 +1,13 @@
 import os
 import logging
 from zoneinfo import ZoneInfo
+from sistema_pedido.refeicoes import obter_refeicao
 
 # === Configurações Gerais do Sistema ===
+
+# Refeicao processada nesta execucao. Mantem almoco como padrao para que as
+# execucoes antigas continuem funcionando enquanto o jantar e implantado.
+REFEICAO_ATUAL = obter_refeicao(os.getenv('REFEICAO', 'almoco'))
 
 # URL do site do refeitório onde os pedidos são feitos
 URL_PRINCIPAL = 'http://200.133.203.133/home'
