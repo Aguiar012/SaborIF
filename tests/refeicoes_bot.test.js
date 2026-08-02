@@ -5,6 +5,7 @@ import {
     analisarComandoCancelamento,
     criarMensagemConfirmacaoTroca,
     detectarRefeicao,
+    interpretarConfirmacaoTroca,
     obterRefeicao,
 } from "../whatsapp/bot/refeicoes.js";
 import { gerarImagemEmailCancelamento } from "../whatsapp/bot/renderizar_email.js";
@@ -42,6 +43,14 @@ test("avisa sobre a autorizacao da CAE antes de trocar para jantar", () => {
     const mensagem = criarMensagemConfirmacaoTroca("jantar");
     assert.match(mensagem, /autorização da CAE/);
     assert.match(mensagem, /dias escolhidos e pratos bloqueados serão mantidos/);
+});
+
+test("aceita o texto mostrado na confirmacao da troca", () => {
+    assert.equal(interpretarConfirmacaoTroca("sim, trocar"), "SIM");
+    assert.equal(interpretarConfirmacaoTroca("Sim, trocar"), "SIM");
+    assert.equal(interpretarConfirmacaoTroca("confirmar_troca_refeicao"), "SIM");
+    assert.equal(interpretarConfirmacaoTroca("não"), "NAO");
+    assert.equal(interpretarConfirmacaoTroca("talvez"), "INCONCLUSIVO");
 });
 
 test("gera o preview de cancelamento de jantar", async () => {

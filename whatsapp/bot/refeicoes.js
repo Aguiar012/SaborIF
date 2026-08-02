@@ -34,6 +34,24 @@ export function criarMensagemConfirmacaoTroca(valor) {
     return `${avisoJantar}Trocar sua refeição para *${refeicao.titulo}*?\n\nSeus dias escolhidos e pratos bloqueados serão mantidos.`;
 }
 
+export function interpretarConfirmacaoTroca(texto) {
+    const normalizado = semAcentos(texto)
+        .replace(/[^a-z0-9_]+/g, " ")
+        .trim();
+
+    if (
+        normalizado === "confirmar_troca_refeicao" ||
+        /^(sim|s|ok)(\s|$)/.test(normalizado)
+    ) return "SIM";
+
+    if (
+        normalizado === "cancelar_troca_refeicao" ||
+        /^(nao|n)(\s|$)/.test(normalizado)
+    ) return "NAO";
+
+    return "INCONCLUSIVO";
+}
+
 export function analisarComandoCancelamento(texto) {
     const normalizado = semAcentos(texto);
     const mencionouRefeicao = /\b(almoco|janta|jantar)\b/.test(normalizado);
