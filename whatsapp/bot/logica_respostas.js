@@ -839,7 +839,7 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
             "🔹 *Bloquear Prato:* Impedir pedidos da sua refeição se tiver certo prato (ex: peixe).\n" +
             "🔹 *Ativar/Desativar:* Liga ou desliga o robô temporariamente.\n\n" +
 
-            "Dica: Digite comandos diretos como *cancelar amanha* ou *não como peixe*."
+            "Dica: Digite comandos diretos como *cancelar amanhã* ou *não como peixe*."
         );
     }
 
@@ -1298,7 +1298,6 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
             // Se falou outra coisa, ignora ou repete
             return criarBotoes(
                 "Por favor, confirme se deseja cancelar.",
-                "Confirmação",
                 [{ id: "confirmar_cancelamento", texto: "Sim, Cancelar" }, { id: "cancelar_abortar", texto: "Não" }, { id: "cancelar_outro", texto: "Outro dia" }]
             );
         }
