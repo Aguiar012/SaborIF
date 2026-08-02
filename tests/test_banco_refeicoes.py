@@ -30,7 +30,9 @@ class BancoRefeicoesTests(unittest.TestCase):
         alunos = banco_dados.buscar_alunos_para_dia(2, "jantar")
 
         self.assertEqual(alunos, [{"id": 10, "prontuario": "pt0000000"}])
-        parametros = cursor.execute.call_args.args[1]
+        sql, parametros = cursor.execute.call_args.args
+        self.assertIn("a.refeicao = %s", sql)
+        self.assertNotIn("p.refeicao", sql)
         self.assertEqual(parametros, [2, "jantar"])
 
     @patch.object(banco_dados, "URL_BANCO_DADOS", "postgres://teste")

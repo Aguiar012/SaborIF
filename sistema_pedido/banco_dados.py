@@ -95,7 +95,7 @@ def buscar_alunos_para_dia(
                       JOIN preferencia_dia p ON p.aluno_id = a.id
                      WHERE a.ativo = true
                        AND p.dia_semana = %s
-                       AND p.refeicao = %s
+                       AND a.refeicao = %s
                        {filtro_prontuario}
                      ORDER BY a.prontuario;
                 """, parametros)
