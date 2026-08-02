@@ -1,14 +1,40 @@
-name: AlmoPT
+name: Pedidos do SaborIF
 
 on:
   workflow_dispatch:
+    inputs:
+      refeicao:
+        description: Refeicao que sera processada
+        required: true
+        default: jantar
+        type: choice
+        options:
+          - jantar
+          - almoco
+      modo_teste:
+        description: Processar somente o prontuario de teste
+        required: true
+        default: true
+        type: boolean
+      prontuario_teste:
+        description: PT usado no teste (obrigatorio no modo de teste)
+        required: false
+        type: string
   schedule:
     - cron: '0 09 * * 1-5'
     - cron: '0 16 * * 1-5'
 
+concurrency:
+  group: pedidos-refeitorio
+  cancel-in-progress: false
+
 jobs:
-  almoco:
+  pedidos:
     runs-on: ubuntu-latest
+    env:
+      REFEICAO: ${{ github.event_name == 'workflow_dispatch' && inputs.refeicao || (github.event.schedule == '0 16 * * 1-5' && 'jantar' || 'almoco') }}
+      MODO_TESTE: ${{ github.event_name == 'workflow_dispatch' && inputs.modo_teste || false }}
+      PRONTUARIO_TESTE: ${{ github.event_name == 'workflow_dispatch' && inputs.prontuario_teste || '' }}
     steps:
       - uses: actions/checkout@v3
 
@@ -20,7 +46,12 @@ jobs:
       - name: Install deps
         run: pip install requests beautifulsoup4 psycopg[binary]
 
-      - name: Run AlmoPT
+      - name: Mostrar modo da execucao
+        run: |
+          echo "Refeicao: $REFEICAO"
+          echo "Modo de teste: $MODO_TESTE"
+
+      - name: Executar pedidos
         env:
           EMAIL_USER:  ${{ secrets.EMAIL_USER }}
           EMAIL_PASS:  ${{ secrets.EMAIL_PASS }}

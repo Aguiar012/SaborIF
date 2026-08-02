@@ -31,7 +31,19 @@ class BancoRefeicoesTests(unittest.TestCase):
 
         self.assertEqual(alunos, [{"id": 10, "prontuario": "pt0000000"}])
         parametros = cursor.execute.call_args.args[1]
-        self.assertEqual(parametros, (2, "jantar"))
+        self.assertEqual(parametros, [2, "jantar"])
+
+    @patch.object(banco_dados, "URL_BANCO_DADOS", "postgres://teste")
+    @patch("sistema_pedido.banco_dados.psycopg.connect")
+    def test_modo_teste_filtra_um_unico_prontuario(self, conectar):
+        contexto, cursor = conexao_simulada([(10, "3029701")])
+        conectar.return_value = contexto
+
+        banco_dados.buscar_alunos_para_dia(2, "jantar", "pt3029701")
+
+        sql, parametros = cursor.execute.call_args.args
+        self.assertIn("regexp_replace(a.prontuario", sql)
+        self.assertEqual(parametros, [2, "jantar", "3029701"])
 
     @patch.object(banco_dados, "URL_BANCO_DADOS", "postgres://teste")
     @patch("sistema_pedido.banco_dados.psycopg.connect")

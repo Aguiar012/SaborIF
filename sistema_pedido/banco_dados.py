@@ -55,7 +55,9 @@ def buscar_cancelamento_direto(aluno_id: int, data_pedido, refeicao='almoco') ->
         logging.error(f"Erro ao buscar cancelamento direto: {e}")
         return False
 
-def buscar_alunos_para_dia(dia_da_semana: int, refeicao='almoco') -> list[dict]:
+def buscar_alunos_para_dia(
+    dia_da_semana: int, refeicao='almoco', prontuario: str | None = None
+) -> list[dict]:
     """
     Busca alunos da refeicao escolhida no dia da semana especificado.
     
@@ -71,19 +73,32 @@ def buscar_alunos_para_dia(dia_da_semana: int, refeicao='almoco') -> list[dict]:
 
     refeicao = obter_refeicao(refeicao)
     alunos = []
+    filtro_prontuario = ''
+    parametros = [dia_da_semana, refeicao.nome]
+
+    if prontuario:
+        prontuario_sem_prefixo = prontuario.strip().lower()
+        if prontuario_sem_prefixo.startswith('pt'):
+            prontuario_sem_prefixo = prontuario_sem_prefixo[2:]
+        filtro_prontuario = """
+                       AND lower(regexp_replace(a.prontuario, '^pt', '', 'i')) = %s
+        """
+        parametros.append(prontuario_sem_prefixo)
+
     try:
         with psycopg.connect(URL_BANCO_DADOS) as conexao:
             with conexao.cursor() as cursor:
                 # Seleciona alunos ativos que marcaram este dia da semana
-                cursor.execute("""
+                cursor.execute(f"""
                     SELECT DISTINCT a.id, a.prontuario
                       FROM aluno a
                       JOIN preferencia_dia p ON p.aluno_id = a.id
                      WHERE a.ativo = true
                        AND p.dia_semana = %s
                        AND p.refeicao = %s
+                       {filtro_prontuario}
                      ORDER BY a.prontuario;
-                """, (dia_da_semana, refeicao.nome))
+                """, parametros)
                 
                 for (id_aluno, prontuario) in cursor.fetchall():
                     alunos.append({'id': id_aluno, 'prontuario': prontuario})

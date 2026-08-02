@@ -5,7 +5,7 @@ import logging
 from datetime import datetime
 from sistema_pedido.configuracao import (
     FUSO_HORARIO, ATRASO_MAXIMO, TENTATIVAS_PEDIDO, TEMPO_ESPERA_ERRO, 
-    REFEICAO_ATUAL, validar_configuracao
+    MODO_TESTE, PRONTUARIO_TESTE, REFEICAO_ATUAL, validar_configuracao
 )
 from sistema_pedido.utils import data_alvo_pedido, verificar_bloqueios, DIAS_SEMANA_PT
 from sistema_pedido.cliente_site import (
@@ -26,6 +26,13 @@ def principal():
     agora = datetime.now(FUSO_HORARIO)
     nome_refeicao = REFEICAO_ATUAL.nome
     titulo_refeicao = REFEICAO_ATUAL.titulo
+    atraso_maximo = 0 if MODO_TESTE else ATRASO_MAXIMO
+
+    if MODO_TESTE:
+        logging.warning(
+            "🧪 MODO TESTE: somente o prontuario %s sera processado.",
+            PRONTUARIO_TESTE,
+        )
     
     # Cria uma sessão HTTP para manter cookies (importante para o CSRF token)
     sessao = requests.Session()
@@ -48,7 +55,16 @@ def principal():
     detalhes_execucao = []
     
     # 3. Busca alunos que querem essa refeicao nesse dia da semana
-    alunos = buscar_alunos_para_dia(dia_semana_iso, REFEICAO_ATUAL)
+    alunos = buscar_alunos_para_dia(
+        dia_semana_iso,
+        REFEICAO_ATUAL,
+        PRONTUARIO_TESTE if MODO_TESTE else None,
+    )
+    if MODO_TESTE and not alunos:
+        raise RuntimeError(
+            f"Prontuario de teste nao encontrado nas preferencias de "
+            f"{nome_refeicao} para {nome_dia_semana}."
+        )
     logging.info(
         f"👥 Encontrados {len(alunos)} alunos para processar no {nome_refeicao}."
     )
@@ -61,7 +77,7 @@ def principal():
         if buscar_cancelamento_direto(id_aluno, data_pedido, REFEICAO_ATUAL):
             hora_inicio = datetime.now(FUSO_HORARIO).strftime('%H:%M:%S')
             # Pausa aleatória para parecer humano
-            time.sleep(random.randint(0, ATRASO_MAXIMO))
+            time.sleep(random.randint(0, atraso_maximo))
             hora_fim = datetime.now(FUSO_HORARIO).strftime('%H:%M:%S')
             
             motivo = 'NAO_PEDIU: CANCELADO_DIRETAMENTE pelo Bot.'
@@ -76,7 +92,7 @@ def principal():
         
         if deve_pular:
             hora_inicio = datetime.now(FUSO_HORARIO).strftime('%H:%M:%S')
-            time.sleep(random.randint(0, ATRASO_MAXIMO))
+            time.sleep(random.randint(0, atraso_maximo))
             hora_fim = datetime.now(FUSO_HORARIO).strftime('%H:%M:%S')
 
             motivo = f'NAO_PEDIU: prato contém bloqueios -> {motivo_bloqueio}'
@@ -101,7 +117,7 @@ def principal():
             continue
 
         # 6. Tenta realizar o pedido
-        time.sleep(random.randint(0, ATRASO_MAXIMO))
+        time.sleep(random.randint(0, atraso_maximo))
         hora_inicio = datetime.now(FUSO_HORARIO).strftime('%H:%M:%S')
         
         sucesso_pedido = False
@@ -139,7 +155,8 @@ def principal():
         )
 
     # 8. Gera Relatório por E-mail
-    linhas_email = [f'Relatório Auto-{titulo_refeicao} — {agora.strftime("%d/%m/%Y")}']
+    prefixo_teste = '[TESTE] ' if MODO_TESTE else ''
+    linhas_email = [f'{prefixo_teste}Relatório Auto-{titulo_refeicao} — {agora.strftime("%d/%m/%Y")}']
     linhas_email.append(f'Data-alvo: {data_pedido.strftime("%d/%m/%Y")} ({nome_dia_semana})')
     
     total_sucesso = sum(1 for _, ok, _, _, _, _ in detalhes_execucao if ok)
@@ -151,7 +168,10 @@ def principal():
         status_txt = 'OK ' if ok else 'FALHOU'
         linhas_email.append(f'{pront} | {status_txt} | {ini}→{fim} | {tent} | {msg}')
         
-    enviar_email(f'Relatório Auto-{titulo_refeicao}', '\n'.join(linhas_email))
+    enviar_email(
+        f'{prefixo_teste}Relatório Auto-{titulo_refeicao}',
+        '\n'.join(linhas_email),
+    )
 
     # 9. Envia Alerta no WhatsApp (apenas erros relevantes)
     lista_erros = [
