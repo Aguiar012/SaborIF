@@ -12,6 +12,7 @@ import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 import caminhos from "../configuracao_pastas.js";
 import { criarFluxoConversa } from "./logica_respostas.js";
+import { executarMigracoes } from "./migracoes.js";
 
 // --- CONFIGURAÇÃO ---
 const PORTA = Number(process.env.PORT) || 3001;
@@ -31,6 +32,11 @@ const logger = P({
         options: { colorize: true }
     }
 });
+
+// Prepara o banco antes de aceitar mensagens. A migracao e idempotente:
+// pode ser executada novamente sem apagar preferencias ou historico.
+await executarMigracoes(process.env.DATABASE_URL, logger);
+
 const app = express();
 app.use(express.json());
 

@@ -14,7 +14,7 @@ from sistema_pedido.cliente_site import (
 from sistema_pedido.banco_dados import (
     buscar_alunos_para_dia, buscar_pratos_bloqueados,
     registrar_historico_pedido, buscar_cancelamento_direto,
-    buscar_telefone_aluno
+    buscar_telefone_aluno, garantir_estrutura_refeicoes
 )
 from sistema_pedido.servicos.email import enviar_email
 from sistema_pedido.servicos.whatsapp import notificar_administradores, enviar_mensagem_aluno
@@ -22,6 +22,7 @@ from sistema_pedido.servicos.whatsapp import notificar_administradores, enviar_m
 def principal():
     """Função principal que gerencia todo o processo de pedidos."""
     validar_configuracao()
+    garantir_estrutura_refeicoes()
     agora = datetime.now(FUSO_HORARIO)
     nome_refeicao = REFEICAO_ATUAL.nome
     titulo_refeicao = REFEICAO_ATUAL.titulo
@@ -47,7 +48,7 @@ def principal():
     detalhes_execucao = []
     
     # 3. Busca alunos que querem essa refeicao nesse dia da semana
-    alunos = buscar_alunos_para_dia(dia_semana_iso)
+    alunos = buscar_alunos_para_dia(dia_semana_iso, REFEICAO_ATUAL)
     logging.info(
         f"👥 Encontrados {len(alunos)} alunos para processar no {nome_refeicao}."
     )
@@ -57,7 +58,7 @@ def principal():
         prontuario = aluno['prontuario']
         
         # 4. Checa se o aluno cancelou manualmente (via Bot) para este dia
-        if buscar_cancelamento_direto(id_aluno, data_pedido):
+        if buscar_cancelamento_direto(id_aluno, data_pedido, REFEICAO_ATUAL):
             hora_inicio = datetime.now(FUSO_HORARIO).strftime('%H:%M:%S')
             # Pausa aleatória para parecer humano
             time.sleep(random.randint(0, ATRASO_MAXIMO))
@@ -81,7 +82,9 @@ def principal():
             motivo = f'NAO_PEDIU: prato contém bloqueios -> {motivo_bloqueio}'
             logging.info(f"🚫 BLOQUEADO: {prontuario} por {motivo_bloqueio}")
 
-            registrar_historico_pedido(id_aluno, data_pedido, motivo)
+            registrar_historico_pedido(
+                id_aluno, data_pedido, motivo, REFEICAO_ATUAL
+            )
             detalhes_execucao.append((prontuario, True, motivo, hora_inicio, hora_fim, 0))
 
             # Avisa o aluno por WhatsApp que o pedido não foi feito
@@ -131,7 +134,9 @@ def principal():
         else:
             motivo_log = f'ERRO_PEDIDO: {mensagem_resultado}'
         
-        registrar_historico_pedido(id_aluno, data_pedido, motivo_log)
+        registrar_historico_pedido(
+            id_aluno, data_pedido, motivo_log, REFEICAO_ATUAL
+        )
 
     # 8. Gera Relatório por E-mail
     linhas_email = [f'Relatório Auto-{titulo_refeicao} — {agora.strftime("%d/%m/%Y")}']
