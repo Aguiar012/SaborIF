@@ -32,10 +32,10 @@ O sistema tem duas partes que trabalham juntas:
 Aluno cadastra pelo WhatsApp
         |
         v
-  Bot salva preferencias no banco (refeicao, dias, bloqueios)
+Bot salva preferencias no banco (refeicao, dias, bloqueios)
         |
         v
-  Nos horarios agendados, o script Python:
+Nos horarios agendados, o script Python:
     1. Busca quem pertence ao almoço ou jantar e escolheu aquele dia
     2. Checa se o prato do dia esta na lista de exclusao do aluno
     3. Faz o pedido no site do refeitorio
