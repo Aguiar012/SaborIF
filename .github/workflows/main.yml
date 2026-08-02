@@ -6,11 +6,11 @@ on:
       refeicao:
         description: Refeicao que sera processada
         required: true
-        default: jantar
+        default: almoco
         type: choice
         options:
-          - jantar
           - almoco
+          - jantar
       modo_teste:
         description: Processar somente o prontuario de teste
         required: true
@@ -38,9 +38,14 @@ permissions:
 
 jobs:
   pedidos:
+    name: Pedidos - ${{ matrix.refeicao }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        refeicao: ${{ fromJSON(github.event_name == 'workflow_dispatch' && format('["{0}"]', inputs.refeicao) || '["almoco","jantar"]') }}
     env:
-      REFEICAO: ${{ github.event_name == 'workflow_dispatch' && inputs.refeicao || (github.event.schedule == '0 16 * * 1-5' && 'jantar' || 'almoco') }}
+      REFEICAO: ${{ matrix.refeicao }}
       MODO_TESTE: ${{ github.event_name == 'workflow_dispatch' && inputs.modo_teste || false }}
       PRONTUARIO_TESTE: ${{ github.event_name == 'workflow_dispatch' && inputs.prontuario_teste || '' }}
       SIMULAR_PEDIDO: ${{ github.event_name == 'workflow_dispatch' && inputs.simular_pedido || false }}
