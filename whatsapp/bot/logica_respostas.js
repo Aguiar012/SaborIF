@@ -7,7 +7,7 @@ import { criarAssistenteIA } from "./inteligencia_artificial.js";
 import { gerarImagemEmailCancelamento } from "./renderizar_email.js";
 import {
     analisarComandoCancelamento,
-    detectarRefeicao,
+    criarMensagemConfirmacaoTroca,
     obterRefeicao,
 } from "./refeicoes.js";
 
@@ -244,6 +244,7 @@ function gerarCabecalho(aluno, pratoAtual, dadosSemana = null) {
     }
 
     const nome = aluno.nome?.split(" ")[0] || "Aluno";
+    const refeicaoAluno = obterRefeicao(aluno.refeicao || "almoco");
 
     // Prato do proximo dia util (esconde se for "nao cadastrado")
     let linhaPrato = "";
@@ -288,7 +289,7 @@ function gerarCabecalho(aluno, pratoAtual, dadosSemana = null) {
             const nomeDia = nomeDias[i];
 
             const pedido = dadosSemana.pedidos.find(p =>
-                (p.refeicao || "almoco") === "almoco" &&
+                (p.refeicao || "almoco") === refeicaoAluno.nome &&
                 dataIsoUTC(p.dia_pedido) === diaIso
             );
             const estaRegistrado = dadosSemana.diasPreferidos.includes(diaNum);
@@ -318,10 +319,6 @@ function gerarCabecalho(aluno, pratoAtual, dadosSemana = null) {
         if (diasNaoVou.length) tabelaSemana += `❌ *Não Vai:* ${diasNaoVou.join(", ")}\n`;
         if (diasErro.length) tabelaSemana += `⚠️ *Sem Dados:* ${diasErro.join(", ")}\n`;
 
-        if (dadosSemana.diasJantar?.length) {
-            tabelaSemana += `🌙 *Jantar:* ${formatarDiasHumanos(dadosSemana.diasJantar)}\n`;
-        }
-
         tabelaSemana += "\n";
     }
 
@@ -329,6 +326,7 @@ function gerarCabecalho(aluno, pratoAtual, dadosSemana = null) {
     return (
         `*IFSP Pirituba - Refeições*\n` +
         `Oi ${nome}!\n` +
+        `Sua refeição: *${refeicaoAluno.titulo}*\n` +
         (linhaPrato ? `${linhaPrato}\n` : "") +
         tabelaSemana +
         `───────────────\n`
@@ -657,17 +655,13 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
         return { ok: true, alunoId: aluno.id, aluno, criado };
     }
 
-    async function salvarPreferenciasDias(c, alunoId, dias = [], refeicao = "almoco") {
-        const refeicaoNormalizada = obterRefeicao(refeicao).nome;
-        await c.query(
-            `DELETE FROM preferencia_dia WHERE aluno_id=$1 AND refeicao=$2`,
-            [alunoId, refeicaoNormalizada]
-        );
+    async function salvarPreferenciasDias(c, alunoId, dias = []) {
+        await c.query(`DELETE FROM preferencia_dia WHERE aluno_id=$1`, [alunoId]);
         if (!dias.length) return;
-        const valores = dias.map((d, i) => `($1,$${i + 3},$2)`).join(",");
+        const valores = dias.map((d, i) => `($1,$${i + 2})`).join(",");
         await c.query(
-            `INSERT INTO preferencia_dia (aluno_id, dia_semana, refeicao) VALUES ${valores}`,
-            [alunoId, refeicaoNormalizada, ...dias]
+            `INSERT INTO preferencia_dia (aluno_id, dia_semana) VALUES ${valores}`,
+            [alunoId, ...dias]
         );
     }
 
@@ -701,13 +695,17 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
         await c.query(`UPDATE aluno SET ativo=$2 WHERE id=$1`, [alunoId, !!ativo]);
     }
 
-    async function obterDiasPreferidos(c, alunoId, refeicao = "almoco") {
+    async function alterarRefeicao(c, alunoId, refeicao) {
         const refeicaoNormalizada = obterRefeicao(refeicao).nome;
+        await c.query(`UPDATE aluno SET refeicao=$2 WHERE id=$1`, [alunoId, refeicaoNormalizada]);
+    }
+
+    async function obterDiasPreferidos(c, alunoId) {
         const { rows } = await c.query(
             `SELECT dia_semana FROM preferencia_dia
-              WHERE aluno_id = $1 AND refeicao = $2
+              WHERE aluno_id = $1
               ORDER BY dia_semana`,
-            [alunoId, refeicaoNormalizada]
+            [alunoId]
         );
         return rows.map(r => r.dia_semana);
     }
@@ -816,7 +814,7 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
             "6. Desbloquear Pratos\n" +
             "7. Ativar/Desativar\n" +
             "8. Guia / Ajuda\n" +
-            "9. Configurar Jantar";
+            "9. Trocar Almoço/Jantar";
 
         return { text: menu };
     }
@@ -834,10 +832,10 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
             "⚠️ *Atenção:* Houve algum erro, verifique no SUAP.\n\n" +
 
             "*Comandos Principais:*\n" +
-            "🔹 *Cancelar Refeição:* Escolha almoço ou jantar e o dia.\n" +
-            "🔹 *Definir Dias:* Escolha seus dias padrão de almoço (ex: seg, qua).\n" +
-            "🔹 *Configurar Jantar:* Escolha separadamente os dias de jantar.\n" +
-            "🔹 *Bloquear Prato:* Impedir pedidos se tiver certo prato (ex: peixe).\n" +
+            "🔹 *Cancelar Refeição:* Escolha o dia; o bot usa sua refeição atual.\n" +
+            "🔹 *Definir Dias:* Escolha seus dias padrão (ex: seg, qua).\n" +
+            "🔹 *Trocar Almoço/Jantar:* Troca sua refeição sem apagar dias ou bloqueios.\n" +
+            "🔹 *Bloquear Prato:* Impedir pedidos da sua refeição se tiver certo prato (ex: peixe).\n" +
             "🔹 *Ativar/Desativar:* Liga ou desliga o robô temporariamente.\n\n" +
 
             "Dica: Digite comandos diretos como *cancelar amanha* ou *não como peixe*."
@@ -846,11 +844,11 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
 
     const MENSAGEM_BOAS_VINDAS = criarTexto(
         "*IFSP Pirituba - Assistente de Refeições*\n\n" +
-        "Esse bot pede *almoço e jantar automaticamente* no sistema do refeitório!\n\n" +
+        "Esse bot pede sua *refeição automaticamente* no sistema do refeitório!\n\n" +
         "Você só precisa:\n" +
         "1. Vincular seu prontuário IFSP\n" +
-        "2. Escolher quais dias da semana você almoça\n" +
-        "3. Se quiser, configurar o jantar pela opção 9\n\n" +
+        "2. Escolher os dias da semana\n" +
+        "3. Se for autorizado pela CAE, trocar de almoço para jantar pela opção 9\n\n" +
         "Depois disso, o bot cuida do resto. Se não quiser comer algum dia, é só cancelar pelo bot.\n\n" +
         "Envie *continuar* para começar o cadastro."
     );
@@ -902,16 +900,13 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
                 let ds = null;
                 if (a) {
                     try {
-                        const [pedidosSemana, diasAlmoco, diasJantar] = await Promise.all([
+                        const [pedidosSemana, diasPreferidos] = await Promise.all([
                             buscarPedidosSemanaAtual(c, a.id),
-                            obterDiasPreferidos(c, a.id, "almoco"),
-                            obterDiasPreferidos(c, a.id, "jantar")
+                            obterDiasPreferidos(c, a.id)
                         ]);
                         ds = {
                             pedidos: pedidosSemana,
-                            diasPreferidos: diasAlmoco,
-                            diasAlmoco,
-                            diasJantar,
+                            diasPreferidos,
                         };
                     } catch (e) {
                         logger.error(`[DB] Erro ao buscar dados da semana: ${e}`);
@@ -959,7 +954,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
         const MAPA_NUMEROS = {
             "1": "cancelar", "2": "status", "3": "historico",
             "4": "preferencia", "5": "bloquear", "6": "desbloquear",
-            "7": null, "8": "guia", "9": "jantar" // 7 e tratado como toggle abaixo
+            "7": null, "8": "guia", "9": "refeicao" // 7 e tratado como toggle abaixo
         };
         if (textoNorm === "7" && usuario.etapa === "MENU_PRINCIPAL") {
             // Toggle: se está ativo → desativa, se inativo → ativa
@@ -978,15 +973,15 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
 
             const bloqueiosUsuario = await conectarBanco(c => obterBloqueios(c, aluno.id));
 
-            const diasAlmocoTxt = dadosSemana?.diasAlmoco?.length ? formatarDiasHumanos(dadosSemana.diasAlmoco) : "nenhum";
-            const diasJantarTxt = dadosSemana?.diasJantar?.length ? formatarDiasHumanos(dadosSemana.diasJantar) : "nenhum";
+            const diasTxt = dadosSemana?.diasPreferidos?.length ? formatarDiasHumanos(dadosSemana.diasPreferidos) : "nenhum";
+            const refeicaoTxt = obterRefeicao(aluno.refeicao || "almoco").titulo;
             const bloqueiosTxt = bloqueiosUsuario.length ? bloqueiosUsuario.join(", ") : "nenhum";
 
             const msg = gerarCabecalho(aluno, pratoAtual, dadosSemana) +
                 "*Status do seu cadastro*\n\n" +
                 `• Cadastro ativo: *${aluno.ativo ? "Sim" : "Não"}*\n` +
-                `• Dias de almoço: *${diasAlmocoTxt}*\n` +
-                `• Dias de jantar: *${diasJantarTxt}*\n` +
+                `• Refeição: *${refeicaoTxt}*\n` +
+                `• Dias escolhidos: *${diasTxt}*\n` +
                 `• Pratos bloqueados: *${bloqueiosTxt}*\n`;
 
             return criarTexto(msg);
@@ -1077,23 +1072,73 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
         // ================= ALUNO LOGADO =================
         const alunoAtual = aluno;
 
+        async function solicitarTrocaRefeicao(refeicaoDesejada) {
+            const refeicaoAtual = obterRefeicao(alunoAtual.refeicao || "almoco");
+            const novaRefeicao = obterRefeicao(refeicaoDesejada);
+
+            if (refeicaoAtual.nome === novaRefeicao.nome) {
+                atualizarUsuario(chaveUsuario, { etapa: "MENU_PRINCIPAL", dados_temporarios: {} });
+                return criarTexto(`Sua refeição já está definida como *${novaRefeicao.titulo}*.`);
+            }
+
+            atualizarUsuario(chaveUsuario, {
+                etapa: "CONFIRMAR_TROCA_REFEICAO",
+                dados_temporarios: { refeicaoDesejada: novaRefeicao.nome },
+            });
+            return criarBotoes(
+                criarMensagemConfirmacaoTroca(novaRefeicao.nome),
+                "Confirmar troca",
+                [
+                    { id: "confirmar_troca_refeicao", texto: "Sim, trocar" },
+                    { id: "cancelar_troca_refeicao", texto: "Não" },
+                ]
+            );
+        }
+
+        if (usuario.etapa === "ESCOLHER_REFEICAO") {
+            if (["1", "almoco"].includes(textoNorm)) return solicitarTrocaRefeicao("almoco");
+            if (["2", "janta", "jantar"].includes(textoNorm)) return solicitarTrocaRefeicao("jantar");
+            return criarTexto("Escolha uma opção:\n\n1. Almoço\n2. Jantar");
+        }
+
+        if (usuario.etapa === "CONFIRMAR_TROCA_REFEICAO") {
+            const refeicaoDesejada = usuario.dados_temporarios?.refeicaoDesejada;
+            let acao = "INCONCLUSIVO";
+            if (["nao", "não", "n", "cancelar_troca_refeicao"].includes(textoNorm)) acao = "NAO";
+            else if (["sim", "s", "ok", "confirmar_troca_refeicao"].includes(textoNorm)) acao = "SIM";
+            else acao = await assistenteIA.interpretarConfirmacao(texto);
+
+            if (acao === "NAO") {
+                atualizarUsuario(chaveUsuario, { etapa: "MENU_PRINCIPAL", dados_temporarios: {} });
+                return criarTexto("Troca de refeição cancelada.");
+            }
+
+            if (acao === "SIM" && refeicaoDesejada) {
+                const novaRefeicao = obterRefeicao(refeicaoDesejada);
+                await conectarBanco(c => alterarRefeicao(c, alunoAtual.id, novaRefeicao.nome));
+                atualizarUsuario(chaveUsuario, { etapa: "MENU_PRINCIPAL", dados_temporarios: {} });
+                return criarTexto(
+                    `Sua refeição agora é *${novaRefeicao.titulo}*.\n\n` +
+                    "Seus dias escolhidos e pratos bloqueados foram mantidos."
+                );
+            }
+
+            return criarBotoes(
+                criarMensagemConfirmacaoTroca(refeicaoDesejada || "jantar"),
+                "Confirmar troca",
+                [
+                    { id: "confirmar_troca_refeicao", texto: "Sim, trocar" },
+                    { id: "cancelar_troca_refeicao", texto: "Não" },
+                ]
+            );
+        }
+
         if (usuario.etapa === "DEFINIR_DIAS") {
             const dias = interpretarListaDias(texto);
             if (!dias.length) return criarTexto("Selecione pelo menos um dia.");
             await conectarBanco(c => salvarPreferenciasDias(c, alunoAtual.id, dias));
             atualizarUsuario(chaveUsuario, { etapa: "MENU_PRINCIPAL", dados_temporarios: {} });
             return menuPrincipalInterativo(alunoAtual, pratoAtual, dadosSemana);
-        }
-
-        if (usuario.etapa === "DEFINIR_DIAS_JANTAR") {
-            const dias = interpretarListaDias(texto);
-            if (!dias.length) return criarTexto("Selecione pelo menos um dia.");
-            await conectarBanco(c => salvarPreferenciasDias(c, alunoAtual.id, dias, "jantar"));
-            atualizarUsuario(chaveUsuario, { etapa: "MENU_PRINCIPAL", dados_temporarios: {} });
-            return criarTexto(
-                `Jantar configurado para: *${formatarDiasHumanos(dias)}*.\n\n` +
-                "O bot fara esses pedidos no horario do jantar."
-            );
         }
 
         if (usuario.etapa === "DEFINIR_BLOQUEIOS") {
@@ -1209,9 +1254,6 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
                 );
                 const dataStr = `${NOMES_DIAS_SEMANA[d.getDay()]} ${formatarDDMM(d)}`;
                 const isoHoje = dataIsoUTC(d);
-                const campoUltimoCancelamento = refeicao.nome === "jantar"
-                    ? "ultimaDataCancelamentoJantar"
-                    : "ultimaDataCancelamento";
 
                 if (metodo === "DIRETO") {
                     const motivo = `CANCELADO_DIRETAMENTE: Aluno solicitou via Bot.`;
@@ -1221,7 +1263,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
                     atualizarUsuario(chaveUsuario, {
                         etapa: "MENU_PRINCIPAL",
                         dados_temporarios: {},
-                        [campoUltimoCancelamento]: isoHoje,
+                        ultimaDataCancelamento: isoHoje,
                     });
                     return criarTexto(
                         `Cancelamento do ${refeicao.titulo.toLowerCase()} registrado para ${dataStr} ` +
@@ -1244,7 +1286,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
                     atualizarUsuario(chaveUsuario, {
                         etapa: "MENU_PRINCIPAL",
                         dados_temporarios: {},
-                        [campoUltimoCancelamento]: isoHoje,
+                        ultimaDataCancelamento: isoHoje,
                     });
                     return criarTexto(
                         `Cancelamento do ${refeicao.titulo.toLowerCase()} enviado para ${dataStr} via e-mail.`
@@ -1312,12 +1354,15 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
         }
 
         // --- CANCELAMENTO (INÍCIO) ---
-        async function processarFluxoCancelamentoDia(dataAlvo, refeicao = "almoco") {
+        async function processarFluxoCancelamentoDia(
+            dataAlvo,
+            refeicao = alunoAtual.refeicao || "almoco"
+        ) {
             const refeicaoAtual = obterRefeicao(refeicao);
             const nomeRefeicao = refeicaoAtual.titulo.toLowerCase();
             const numeroDiaAlvo = dataAlvo.getDay();
             const diasPreferidos = await conectarBanco(c =>
-                obterDiasPreferidos(c, alunoAtual.id, refeicaoAtual.nome)
+                obterDiasPreferidos(c, alunoAtual.id)
             );
             const diasPreferidosNums = diasPreferidos.length > 0
                 ? diasPreferidos
@@ -1393,53 +1438,13 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
             }
         }
 
-        if (usuario.etapa === "ESCOLHER_REFEICAO_CANCELAMENTO") {
-            let refeicaoEscolhida = null;
-            if (["1", "almoco"].includes(textoNorm)) refeicaoEscolhida = "almoco";
-            if (["2", "janta", "jantar"].includes(textoNorm)) refeicaoEscolhida = "jantar";
-
-            if (!refeicaoEscolhida) {
-                return criarTexto(
-                    "Qual refeição você quer cancelar?\n\n" +
-                    "1. Almoço\n2. Jantar"
-                );
-            }
-
-            const comandoPendente = usuario.dados_temporarios?.comandoPendente;
-            if (comandoPendente) {
-                atualizarUsuario(chaveUsuario, {
-                    etapa: "MENU_PRINCIPAL",
-                    dados_temporarios: {},
-                });
-                return processarTexto(
-                    jid,
-                    `${comandoPendente} ${refeicaoEscolhida}`,
-                    false,
-                    true
-                );
-            }
-
-            const diasPreferidos = await conectarBanco(c =>
-                obterDiasPreferidos(c, alunoAtual.id, refeicaoEscolhida)
-            );
-            const campoUltimo = refeicaoEscolhida === "jantar"
-                ? "ultimaDataCancelamentoJantar"
-                : "ultimaDataCancelamento";
-            const proximaData = obterProximoDiaPreferido(
-                new Date(),
-                diasPreferidos,
-                usuario[campoUltimo]
-            );
-            return processarFluxoCancelamentoDia(proximaData, refeicaoEscolhida);
-        }
-
         // --- NOVO MENU DE CANCELAMENTO ---
         if (usuario.etapa === "MENU_CANCELAR_OPCOES") {
-            const refeicaoCancelamento = usuario.dados_temporarios?.refeicao || "almoco";
+            const refeicaoCancelamento = obterRefeicao(alunoAtual.refeicao || "almoco").nome;
             if (["1", "cancelar_prox", "amanha", "amanhã"].includes(textoNorm) || textoNorm.includes("amanha")) {
                const proxDataStr = usuario.dados_temporarios?.proxData;
                const diasPreferidos = await conectarBanco(c =>
-                   obterDiasPreferidos(c, alunoAtual.id, refeicaoCancelamento)
+                   obterDiasPreferidos(c, alunoAtual.id)
                );
                const dataAlvo = proxDataStr
                    ? new Date(proxDataStr)
@@ -1467,9 +1472,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
                            (p.refeicao || "almoco") === refeicaoCancelamento &&
                            dataIsoUTC(p.dia_pedido) === diaIso
                        );
-                       const diasDaRefeicao = refeicaoCancelamento === "jantar"
-                           ? (dadosSemana.diasJantar || [])
-                           : (dadosSemana.diasPreferidos || []);
+                       const diasDaRefeicao = dadosSemana.diasPreferidos || [];
                        const statusIcon = pedido ? (classificarMotivo(pedido.motivo).tipo === "PEDIU_OK" ? "✅" : (classificarMotivo(pedido.motivo).tipo === "NAO_PEDIU" || pedido.motivo.includes("CANCELADO") ? "❌" : "⚠️")) : (diasDaRefeicao.includes(i + 1) ? "📅" : "❌");
                        listaVisual += `\n${statusIcon} ${nomeDias[i]} ${formatarDataBR(dataDodia)}`;
                    }
@@ -1480,7 +1483,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
         }
 
         if (usuario.etapa === "ESCOLHER_DIA_CANCELAMENTO") {
-            const refeicaoCancelamento = usuario.dados_temporarios?.refeicao || "almoco";
+            const refeicaoCancelamento = obterRefeicao(alunoAtual.refeicao || "almoco").nome;
             if (textoNorm.includes("amanha") || textoNorm.includes("amanhã") || textoNorm.includes("hoje")) {
                // Deixa o fluxo principal pegar isso embaixo
                atualizarUsuario(chaveUsuario, { etapa: "MENU_PRINCIPAL" });
@@ -1499,30 +1502,27 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
 
         if (textoNorm.startsWith("cancelar") || (textoNorm.includes("nao vou") && textoNorm !== 'nao')) {
             const {
-                refeicao: refeicaoCancelamento,
+                refeicao: refeicaoMencionada,
                 mencionouRefeicao,
                 comandoSemRefeicao,
             } = analisarComandoCancelamento(textoNorm);
-            
-            // Sem mencionar a refeicao, pergunta para evitar cancelar a errada.
-            if (!mencionouRefeicao) {
-                 atualizarUsuario(chaveUsuario, {
-                     etapa: "ESCOLHER_REFEICAO_CANCELAMENTO",
-                     dados_temporarios: { comandoPendente: textoNorm },
-                 });
-                 return criarTexto("Qual refeição você quer cancelar?\n\n1. Almoço\n2. Jantar");
+
+            const refeicaoPerfil = obterRefeicao(alunoAtual.refeicao || "almoco");
+            const refeicaoCancelamento = refeicaoPerfil.nome;
+            if (mencionouRefeicao && refeicaoMencionada !== refeicaoPerfil.nome) {
+                return criarTexto(
+                    `Seu cadastro está definido como *${refeicaoPerfil.titulo}*. ` +
+                    "Nenhum cancelamento foi feito. Para trocar de refeição, use a opção 9."
+                );
             }
 
-            // "cancelar jantar" ou "cancelar almoco" usa o proximo dia configurado.
+            // "cancelar" usa o proximo dia configurado para a refeicao do aluno.
             if (["cancelar", "nao vou"].includes(comandoSemRefeicao)) {
                  const diasPreferidos = await conectarBanco(c =>
-                     obterDiasPreferidos(c, alunoAtual.id, refeicaoCancelamento)
+                     obterDiasPreferidos(c, alunoAtual.id)
                  );
-                 const campoUltimo = refeicaoCancelamento === "jantar"
-                     ? "ultimaDataCancelamentoJantar"
-                     : "ultimaDataCancelamento";
                  const proxData = obterProximoDiaPreferido(
-                     new Date(), diasPreferidos, usuario[campoUltimo]
+                     new Date(), diasPreferidos, usuario.ultimaDataCancelamento
                  );
                  return await processarFluxoCancelamentoDia(proxData, refeicaoCancelamento);
             }
@@ -1531,13 +1531,10 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
             let dataAlvo = null;
             if (textoNorm.includes("amanha") || textoNorm.includes("amanhã")) {
                 const diasPreferidos = await conectarBanco(c =>
-                    obterDiasPreferidos(c, alunoAtual.id, refeicaoCancelamento)
+                    obterDiasPreferidos(c, alunoAtual.id)
                 );
-                const campoUltimo = refeicaoCancelamento === "jantar"
-                    ? "ultimaDataCancelamentoJantar"
-                    : "ultimaDataCancelamento";
                 dataAlvo = obterProximoDiaPreferido(
-                    new Date(), diasPreferidos, usuario[campoUltimo]
+                    new Date(), diasPreferidos, usuario.ultimaDataCancelamento
                 );
             } else if (textoNorm.includes("hoje")) {
                 dataAlvo = new Date(); 
@@ -1553,28 +1550,38 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
             if (!dataAlvo) {
                  return criarTexto(
                      "Não entendi qual dia cancelar. Use, por exemplo, " +
-                     "'cancelar jantar quarta' ou 'cancelar almoço amanhã'."
+                     "'cancelar quarta' ou 'cancelar amanhã'."
                  );
             }
             return await processarFluxoCancelamentoDia(dataAlvo, refeicaoCancelamento);
         }
 
-        if (
-            textoNorm === "jantar" ||
-            textoNorm === "janta" ||
-            ((textoNorm.startsWith("preferencia") || textoNorm.startsWith("dias")) &&
-                detectarRefeicao(textoNorm).nome === "jantar")
-        ) {
-            atualizarUsuario(chaveUsuario, { etapa: "DEFINIR_DIAS_JANTAR", dados_temporarios: {} });
-            return menuDiasSemana(
-                "Selecione os dias da semana em que voce janta:",
-                "jantar"
+        if (["refeicao", "trocar refeicao", "mudar refeicao"].includes(textoNorm)) {
+            atualizarUsuario(chaveUsuario, { etapa: "ESCOLHER_REFEICAO", dados_temporarios: {} });
+            return criarTexto(
+                `Sua refeição atual é *${obterRefeicao(alunoAtual.refeicao || "almoco").titulo}*.\n\n` +
+                "Escolha uma opção:\n1. Almoço\n2. Jantar"
             );
+        }
+
+        if (
+            ["jantar", "janta"].includes(textoNorm) ||
+            ((textoNorm.startsWith("preferencia") || textoNorm.startsWith("dias")) &&
+                /\b(janta|jantar)\b/.test(textoNorm))
+        ) {
+            return solicitarTrocaRefeicao("jantar");
+        }
+
+        if (textoNorm === "almoco") {
+            return solicitarTrocaRefeicao("almoco");
         }
 
         if (textoNorm.startsWith("preferencia") || textoNorm === "dias") {
             atualizarUsuario(chaveUsuario, { etapa: "DEFINIR_DIAS", dados_temporarios: {} });
-            return menuDiasSemana("Selecione os dias da semana que você almoça:");
+            return menuDiasSemana(
+                "Selecione os dias da semana da sua refeição:",
+                alunoAtual.refeicao || "almoco"
+            );
         }
 
         if (textoNorm.startsWith("bloquear") || textoNorm.includes("nao como")) {
@@ -1656,14 +1663,12 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
         // -- Fallback: tenta classificar com IA (so uma vez, evitar loop) --
         if (!jaUsouIA) {
             // Monta contexto do usuario para a IA
-            const diasAlmoco = dadosSemana?.diasAlmoco || [];
-            const diasJantar = dadosSemana?.diasJantar || [];
+            const diasCadastrados = dadosSemana?.diasPreferidos || [];
             const bloqueiosUsuario = await conectarBanco(c => obterBloqueios(c, alunoAtual.id));
             const dadosParaIA = {
                 nome: alunoAtual.nome || alunoAtual.prontuario,
-                diasCadastrados: diasAlmoco,
-                diasAlmoco,
-                diasJantar,
+                refeicao: alunoAtual.refeicao || "almoco",
+                diasCadastrados,
                 bloqueios: bloqueiosUsuario,
                 ativo: alunoAtual.ativo,
                 ultimoPedido: dadosSemana?.pedidos?.[0] ? `${dadosSemana.pedidos[0].dia_pedido} - ${dadosSemana.pedidos[0].motivo}` : null

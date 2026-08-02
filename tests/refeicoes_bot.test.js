@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
     analisarComandoCancelamento,
+    criarMensagemConfirmacaoTroca,
     detectarRefeicao,
     obterRefeicao,
 } from "../whatsapp/bot/refeicoes.js";
@@ -26,7 +27,7 @@ test("detecta a refeicao mencionada em uma frase", () => {
     assert.equal(detectarRefeicao("alterar dias").nome, "almoco");
 });
 
-test("nao adivinha a refeicao de um cancelamento ambiguo", () => {
+test("identifica quando o cancelamento menciona uma refeicao", () => {
     const ambiguo = analisarComandoCancelamento("cancelar quarta");
     assert.equal(ambiguo.mencionouRefeicao, false);
     assert.equal(ambiguo.comandoSemRefeicao, "cancelar quarta");
@@ -35,6 +36,12 @@ test("nao adivinha a refeicao de um cancelamento ambiguo", () => {
     assert.equal(jantar.mencionouRefeicao, true);
     assert.equal(jantar.refeicao, "jantar");
     assert.equal(jantar.comandoSemRefeicao, "cancelar quarta");
+});
+
+test("avisa sobre a autorizacao da CAE antes de trocar para jantar", () => {
+    const mensagem = criarMensagemConfirmacaoTroca("jantar");
+    assert.match(mensagem, /autorização da CAE/);
+    assert.match(mensagem, /dias escolhidos e pratos bloqueados serão mantidos/);
 });
 
 test("gera o preview de cancelamento de jantar", async () => {

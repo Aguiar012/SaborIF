@@ -21,6 +21,14 @@ def conexao_simulada(linhas=None):
 
 
 class BancoRefeicoesTests(unittest.TestCase):
+    def test_migracao_guarda_refeicao_no_aluno_e_mantem_dias_unicos(self):
+        sql = banco_dados.CAMINHO_MIGRACAO_REFEICOES.read_text(encoding="utf-8")
+
+        self.assertIn("ALTER TABLE aluno", sql)
+        self.assertIn("ADD COLUMN IF NOT EXISTS refeicao", sql)
+        self.assertIn("UNIQUE (aluno_id, dia_semana)", sql)
+        self.assertIn("DROP COLUMN IF EXISTS refeicao", sql)
+
     @patch.object(banco_dados, "URL_BANCO_DADOS", "postgres://teste")
     @patch("sistema_pedido.banco_dados.psycopg.connect")
     def test_busca_alunos_somente_da_refeicao_escolhida(self, conectar):

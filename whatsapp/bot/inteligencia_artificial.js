@@ -73,40 +73,43 @@ ${PRATOS_CARDAPIO_IFSP.join(", ")}`;
 const COMANDOS_VALIDOS = [
     "cancelar", "status", "historico",
     "preferencia", "bloquear", "desbloquear",
-    "ativar", "desativar", "ajuda", "jantar"
+    "ativar", "desativar", "ajuda", "refeicao", "jantar"
 ];
 
 const PROMPT_SISTEMA = `Você é o assistente do bot de refeições do IFSP.
 
 COMO O SISTEMA FUNCIONA:
-- O bot pede almoço e jantar automaticamente, cada um nos dias que o aluno escolheu
-- As preferências de almoço e jantar são separadas
-- Se o aluno NÃO quer uma refeição, precisa CANCELAR antes
+- Cada aluno escolhe uma única refeição: almoço OU jantar, nunca as duas ao mesmo tempo
+- O aluno escolhe os dias da semana da sua refeição atual
+- Usuários antigos continuam cadastrados no almoço
+- É possível trocar a refeição sem perder dias ou pratos bloqueados
+- O jantar está disponível somente para alunos autorizados pela CAE e a troca exige confirmação
+- Se o aluno NÃO quer comer em um dia, precisa CANCELAR antes
 - Pratos bloqueados são pulados automaticamente
-- O aluno pode configurar dias de almoço e jantar, bloquear pratos, ver status e histórico
+- O aluno pode configurar dias, bloquear pratos, ver status e histórico
 
 FORMATO DA SUA RESPOSTA:
 - Se o usuario quer EXECUTAR uma acao, responda: COMANDO:nome_do_comando
-  Comandos validos base: cancelar, status, historico, preferencia, jantar, bloquear, desbloquear, ativar, desativar
-- Para configurar dias de jantar, responda: COMANDO:jantar
-- Se a refeição estiver clara no cancelamento, preserve-a no comando (ex: COMANDO:cancelar jantar quarta)
-- Se a refeição estiver ambígua, não adivinhe; responda o cancelamento sem refeição para o bot perguntar
+  Comandos validos base: cancelar, status, historico, preferencia, refeicao, jantar, bloquear, desbloquear, ativar, desativar
+- Para trocar ou escolher entre almoço e jantar, responda: COMANDO:refeicao
+- Se o aluno disser diretamente que quer jantar, responda: COMANDO:jantar
+- Em cancelamentos, não escolha uma refeição: o bot usa automaticamente o perfil atual do aluno
 - Se o usuario faz uma PERGUNTA ou tem DUVIDA, responda em texto curto (1-2 frases) usando os dados do usuario
 - NUNCA responda COMANDO:ajuda para perguntas sobre o sistema. So use COMANDO:ajuda se a mensagem nao tem relação com refeições
 
 EXEMPLOS:
 Usuario (cadastrado seg,qua,sex): "amanha vai pedir pra mim?"
-Se amanha e segunda: responda usando separadamente os dias de almoço e jantar do contexto.
+Se amanha e segunda: responda usando a refeição atual e os dias do contexto.
 Se amanha e sabado: "Nao, amanha e sabado e voce so esta cadastrado para seg, qua e sex."
 
 Usuario: "nao vou comer amanha" ou "cancelar almoco de terca"
-Resposta: COMANDO:cancelar amanha ou COMANDO:cancelar almoco terca
+Resposta: COMANDO:cancelar amanha ou COMANDO:cancelar terca
 
 Usuario: "quero jantar terça e quinta"
 Resposta: COMANDO:jantar
 
 Usuario: "como funciona esse bot?"
-Resposta: "O bot pede almoço e jantar automaticamente nos dias cadastrados para cada refeição. Se não quiser alguma delas, é só cancelar."
+Resposta: "O bot pede sua refeição atual nos dias cadastrados. Você pode escolher almoço ou jantar, mas não os dois ao mesmo tempo."
 
 Usuario: "quero ver meus dados"
 Resposta: COMANDO:status
@@ -197,12 +200,11 @@ function gerarContextoUsuario(dadosUsuario) {
     const partes = [];
     partes.push(`Nome: ${dadosUsuario.nome || "desconhecido"} `);
 
-    const diasAlmoco = dadosUsuario.diasAlmoco || dadosUsuario.diasCadastrados || [];
-    const diasJantar = dadosUsuario.diasJantar || [];
-    const nomesAlmoco = diasAlmoco.map(d => NOMES_DIAS[d] || d).join(", ") || "nenhum";
-    const nomesJantar = diasJantar.map(d => NOMES_DIAS[d] || d).join(", ") || "nenhum";
-    partes.push(`Dias de almoco: ${nomesAlmoco} `);
-    partes.push(`Dias de jantar: ${nomesJantar} `);
+    const refeicao = dadosUsuario.refeicao === "jantar" ? "jantar" : "almoco";
+    const diasCadastrados = dadosUsuario.diasCadastrados || [];
+    const nomesDias = diasCadastrados.map(d => NOMES_DIAS[d] || d).join(", ") || "nenhum";
+    partes.push(`Refeicao atual: ${refeicao} `);
+    partes.push(`Dias cadastrados: ${nomesDias} `);
 
     if (dadosUsuario.bloqueios && dadosUsuario.bloqueios.length) {
         partes.push(`Pratos bloqueados: ${dadosUsuario.bloqueios.join(", ")} `);

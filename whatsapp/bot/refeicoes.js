@@ -25,6 +25,15 @@ export function detectarRefeicao(texto, padrao = "almoco") {
     return obterRefeicao(padrao);
 }
 
+export function criarMensagemConfirmacaoTroca(valor) {
+    const refeicao = obterRefeicao(valor);
+    const avisoJantar = refeicao.nome === "jantar"
+        ? "⚠️ O jantar está disponível somente para alguns alunos, conforme autorização da CAE. Confirme apenas se você faz parte desse grupo.\n\n"
+        : "";
+
+    return `${avisoJantar}Trocar sua refeição para *${refeicao.titulo}*?\n\nSeus dias escolhidos e pratos bloqueados serão mantidos.`;
+}
+
 export function analisarComandoCancelamento(texto) {
     const normalizado = semAcentos(texto);
     const mencionouRefeicao = /\b(almoco|janta|jantar)\b/.test(normalizado);
