@@ -824,11 +824,11 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
     // --- Menu Guia (Novo) ---
     function menuGuia() {
         return criarTexto(
-            "*Guia do Bot IFSP Food* 🤖\n\n" +
-
+            "*Guia do SaborIF* 🤖\n\n" +
+            
             "*Legenda dos Dias:*\n" +
             "✅ *Já Pedi:* O bot já fez o pedido no SUAP.\n" +
-            "📅 *Vou Comer:* Está agendado, o bot vai pedir no dia.\n" +
+            "📅 *Vai pedir:* Está agendado, o bot vai pedir no dia.\n" +
             "❌ *Não Vou:* Você não configurou ou cancelou este dia.\n" +
             "⚠️ *Atenção:* Houve algum erro, verifique no SUAP.\n\n" +
 
