@@ -1,8 +1,34 @@
 import psycopg
 import logging
+from pathlib import Path
 from sistema_pedido.configuracao import URL_BANCO_DADOS
+from sistema_pedido.refeicoes import obter_refeicao
 
-def buscar_cancelamento_direto(aluno_id: int, data_pedido) -> bool:
+
+CAMINHO_MIGRACAO_REFEICOES = (
+    Path(__file__).resolve().parent.parent
+    / 'migrations'
+    / '001_adicionar_refeicoes.sql'
+)
+
+
+def garantir_estrutura_refeicoes():
+    """Aplica a migracao idempotente de almoco e jantar."""
+    if not URL_BANCO_DADOS:
+        return
+
+    sql = CAMINHO_MIGRACAO_REFEICOES.read_text(encoding='utf-8')
+    try:
+        with psycopg.connect(URL_BANCO_DADOS) as conexao:
+            with conexao.cursor() as cursor:
+                cursor.execute(sql)
+        logging.info("✅ Estrutura de almoco e jantar pronta.")
+    except Exception as erro:
+        logging.error(f"❌ Erro ao preparar estrutura de refeicoes: {erro}")
+        raise
+
+
+def buscar_cancelamento_direto(aluno_id: int, data_pedido, refeicao='almoco') -> bool:
     """
     Verifica se existe um pedido cancelado diretamente para este aluno nesta data.
     Retorna True se o aluno já cancelou (e portanto não devemos pedir).
@@ -10,6 +36,8 @@ def buscar_cancelamento_direto(aluno_id: int, data_pedido) -> bool:
     if not URL_BANCO_DADOS:
         return False
         
+    refeicao = obter_refeicao(refeicao)
+
     try:
         with psycopg.connect(URL_BANCO_DADOS) as conexao:
             with conexao.cursor() as cursor:
@@ -18,17 +46,20 @@ def buscar_cancelamento_direto(aluno_id: int, data_pedido) -> bool:
                       FROM pedido
                      WHERE aluno_id = %s
                        AND dia_pedido = %s
+                       AND refeicao = %s
                        AND motivo LIKE 'CANCELADO_DIRETAMENTE%%';
-                """, (aluno_id, data_pedido))
+                """, (aluno_id, data_pedido, refeicao.nome))
                 resultado = cursor.fetchone()
                 return resultado is not None
     except Exception as e:
         logging.error(f"Erro ao buscar cancelamento direto: {e}")
         return False
 
-def buscar_alunos_para_dia(dia_da_semana: int) -> list[dict]:
+def buscar_alunos_para_dia(
+    dia_da_semana: int, refeicao='almoco', prontuario: str | None = None
+) -> list[dict]:
     """
-    Busca alunos que têm preferência para almoçar no dia da semana especificado.
+    Busca alunos da refeicao escolhida no dia da semana especificado.
     
     Args:
         dia_da_semana (int): 1=Segunda, ..., 5=Sexta
@@ -40,19 +71,34 @@ def buscar_alunos_para_dia(dia_da_semana: int) -> list[dict]:
         logging.error("❌ URL do banco não configurada!")
         return []
 
+    refeicao = obter_refeicao(refeicao)
     alunos = []
+    filtro_prontuario = ''
+    parametros = [dia_da_semana, refeicao.nome]
+
+    if prontuario:
+        prontuario_sem_prefixo = prontuario.strip().lower()
+        if prontuario_sem_prefixo.startswith('pt'):
+            prontuario_sem_prefixo = prontuario_sem_prefixo[2:]
+        filtro_prontuario = """
+                       AND lower(regexp_replace(a.prontuario, '^pt', '', 'i')) = %s
+        """
+        parametros.append(prontuario_sem_prefixo)
+
     try:
         with psycopg.connect(URL_BANCO_DADOS) as conexao:
             with conexao.cursor() as cursor:
                 # Seleciona alunos ativos que marcaram este dia da semana
-                cursor.execute("""
+                cursor.execute(f"""
                     SELECT DISTINCT a.id, a.prontuario
                       FROM aluno a
                       JOIN preferencia_dia p ON p.aluno_id = a.id
                      WHERE a.ativo = true
                        AND p.dia_semana = %s
+                       AND a.refeicao = %s
+                       {filtro_prontuario}
                      ORDER BY a.prontuario;
-                """, (dia_da_semana,))
+                """, parametros)
                 
                 for (id_aluno, prontuario) in cursor.fetchall():
                     alunos.append({'id': id_aluno, 'prontuario': prontuario})
@@ -106,10 +152,14 @@ def buscar_pratos_bloqueados(prontuario: str) -> list[str]:
         logging.error(f"Erro ao buscar bloqueios do prontuário {prontuario}: {e}")
         return []
 
-def registrar_historico_pedido(aluno_id: int, data_pedido, motivo: str):
+def registrar_historico_pedido(
+    aluno_id: int, data_pedido, motivo: str, refeicao='almoco'
+):
     """Salva no banco o resultado da tentativa de pedido (sucesso, erro ou pulo)."""
     if not URL_BANCO_DADOS:
         return
+
+    refeicao = obter_refeicao(refeicao)
 
     # Corta o motivo para caber no banco se for muito grande
     motivo_seguro = (motivo or "")[:800]
@@ -118,9 +168,9 @@ def registrar_historico_pedido(aluno_id: int, data_pedido, motivo: str):
         with psycopg.connect(URL_BANCO_DADOS) as conexao:
             with conexao.cursor() as cursor:
                 cursor.execute("""
-                    INSERT INTO pedido (aluno_id, dia_pedido, motivo)
-                    VALUES (%s, %s, %s)
-                """, (aluno_id, data_pedido, motivo_seguro))
+                    INSERT INTO pedido (aluno_id, dia_pedido, motivo, refeicao)
+                    VALUES (%s, %s, %s, %s)
+                """, (aluno_id, data_pedido, motivo_seguro, refeicao.nome))
             conexao.commit()
     except Exception as e:
         logging.error(f"❌ Erro ao salvar histórico do pedido: {e}")

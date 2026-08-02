@@ -5,6 +5,7 @@ import logging
 from datetime import datetime
 from sistema_pedido.configuracao import (
     FUSO_HORARIO, ATRASO_MAXIMO, TENTATIVAS_PEDIDO, TEMPO_ESPERA_ERRO, 
+    MODO_TESTE, PRONTUARIO_TESTE, REFEICAO_ATUAL, SIMULAR_PEDIDO,
     validar_configuracao
 )
 from sistema_pedido.utils import data_alvo_pedido, verificar_bloqueios, DIAS_SEMANA_PT
@@ -14,7 +15,7 @@ from sistema_pedido.cliente_site import (
 from sistema_pedido.banco_dados import (
     buscar_alunos_para_dia, buscar_pratos_bloqueados,
     registrar_historico_pedido, buscar_cancelamento_direto,
-    buscar_telefone_aluno
+    buscar_telefone_aluno, garantir_estrutura_refeicoes
 )
 from sistema_pedido.servicos.email import enviar_email
 from sistema_pedido.servicos.whatsapp import notificar_administradores, enviar_mensagem_aluno
@@ -22,7 +23,21 @@ from sistema_pedido.servicos.whatsapp import notificar_administradores, enviar_m
 def principal():
     """Função principal que gerencia todo o processo de pedidos."""
     validar_configuracao()
+    garantir_estrutura_refeicoes()
     agora = datetime.now(FUSO_HORARIO)
+    nome_refeicao = REFEICAO_ATUAL.nome
+    titulo_refeicao = REFEICAO_ATUAL.titulo
+    atraso_maximo = 0 if MODO_TESTE else ATRASO_MAXIMO
+
+    if MODO_TESTE:
+        logging.warning(
+            "🧪 MODO TESTE: somente o prontuario %s sera processado.",
+            PRONTUARIO_TESTE,
+        )
+    if SIMULAR_PEDIDO:
+        logging.warning(
+            "🧪 SIMULACAO: nenhum pedido, historico, e-mail ou WhatsApp sera enviado."
+        )
     
     # Cria uma sessão HTTP para manter cookies (importante para o CSRF token)
     sessao = requests.Session()
@@ -37,26 +52,52 @@ def principal():
     # 2. Atualiza o cardápio no banco e descobre o prato do DIA ALVO DO PEDIDO
     # IMPORTANTE: passa data_pedido para buscar o prato correto (do dia que o aluno vai comer)
     # e não o prato de hoje (que pode ser diferente, ex: sexta pedindo para segunda)
-    texto_prato_dia = buscar_cardapio_site(sessao, data_pedido)
+    texto_prato_dia = (
+        "(cardapio nao consultado na simulacao)"
+        if SIMULAR_PEDIDO
+        else buscar_cardapio_site(sessao, data_pedido)
+    )
 
     logging.info(f"🍛 Texto usado para checar bloqueios (prato de {data_pedido}): {texto_prato_dia}")
 
     # Lista para guardar o relatório de execução
     detalhes_execucao = []
     
-    # 3. Busca alunos que querem almoçar nesse dia da semana
-    alunos = buscar_alunos_para_dia(dia_semana_iso)
-    logging.info(f"👥 Encontrados {len(alunos)} alunos para processar.")
+    # 3. Busca alunos que querem essa refeicao nesse dia da semana
+    alunos = buscar_alunos_para_dia(
+        dia_semana_iso,
+        REFEICAO_ATUAL,
+        PRONTUARIO_TESTE if MODO_TESTE else None,
+    )
+    if MODO_TESTE and not alunos:
+        raise RuntimeError(
+            f"Prontuario de teste nao encontrado nas preferencias de "
+            f"{nome_refeicao} para {nome_dia_semana}."
+        )
+    logging.info(
+        f"👥 Encontrados {len(alunos)} alunos para processar no {nome_refeicao}."
+    )
+
+    if SIMULAR_PEDIDO:
+        for aluno in alunos:
+            logging.info(
+                "🧪 SIMULARIA %s para %s (tipo SICA %s).",
+                nome_refeicao,
+                aluno['prontuario'],
+                REFEICAO_ATUAL.codigo_sica,
+            )
+        logging.warning("🧪 Simulacao concluida sem enviar pedidos.")
+        return
 
     for aluno in alunos:
         id_aluno = aluno['id']
         prontuario = aluno['prontuario']
         
         # 4. Checa se o aluno cancelou manualmente (via Bot) para este dia
-        if buscar_cancelamento_direto(id_aluno, data_pedido):
+        if buscar_cancelamento_direto(id_aluno, data_pedido, REFEICAO_ATUAL):
             hora_inicio = datetime.now(FUSO_HORARIO).strftime('%H:%M:%S')
             # Pausa aleatória para parecer humano
-            time.sleep(random.randint(0, ATRASO_MAXIMO))
+            time.sleep(random.randint(0, atraso_maximo))
             hora_fim = datetime.now(FUSO_HORARIO).strftime('%H:%M:%S')
             
             motivo = 'NAO_PEDIU: CANCELADO_DIRETAMENTE pelo Bot.'
@@ -71,13 +112,15 @@ def principal():
         
         if deve_pular:
             hora_inicio = datetime.now(FUSO_HORARIO).strftime('%H:%M:%S')
-            time.sleep(random.randint(0, ATRASO_MAXIMO))
+            time.sleep(random.randint(0, atraso_maximo))
             hora_fim = datetime.now(FUSO_HORARIO).strftime('%H:%M:%S')
 
             motivo = f'NAO_PEDIU: prato contém bloqueios -> {motivo_bloqueio}'
             logging.info(f"🚫 BLOQUEADO: {prontuario} por {motivo_bloqueio}")
 
-            registrar_historico_pedido(id_aluno, data_pedido, motivo)
+            registrar_historico_pedido(
+                id_aluno, data_pedido, motivo, REFEICAO_ATUAL
+            )
             detalhes_execucao.append((prontuario, True, motivo, hora_inicio, hora_fim, 0))
 
             # Avisa o aluno por WhatsApp que o pedido não foi feito
@@ -85,7 +128,7 @@ def principal():
             if telefone_aluno:
                 data_fmt = data_pedido.strftime('%d/%m')
                 msg_aluno = (
-                    f"Oi! Seu almoço de *{nome_dia_semana}* ({data_fmt}) "
+                    f"Oi! Seu {nome_refeicao} de *{nome_dia_semana}* ({data_fmt}) "
                     f"não foi pedido porque o prato (*{texto_prato_dia}*) "
                     f"contém item da sua lista de exclusão: *{motivo_bloqueio}*."
                 )
@@ -94,7 +137,7 @@ def principal():
             continue
 
         # 6. Tenta realizar o pedido
-        time.sleep(random.randint(0, ATRASO_MAXIMO))
+        time.sleep(random.randint(0, atraso_maximo))
         hora_inicio = datetime.now(FUSO_HORARIO).strftime('%H:%M:%S')
         
         sucesso_pedido = False
@@ -104,7 +147,9 @@ def principal():
         for tentativa in range(1, TENTATIVAS_PEDIDO + 1):
             logging.info(f"🔄 Tentativa {tentativa} para {prontuario}...")
             try:
-                sucesso_pedido, mensagem_resultado = realizar_pedido(sessao, prontuario)
+                sucesso_pedido, mensagem_resultado = realizar_pedido(
+                    sessao, prontuario, REFEICAO_ATUAL
+                )
                 if sucesso_pedido:
                     logging.info(f"✅ Sucesso para {prontuario}: {mensagem_resultado}")
                     break
@@ -125,10 +170,13 @@ def principal():
         else:
             motivo_log = f'ERRO_PEDIDO: {mensagem_resultado}'
         
-        registrar_historico_pedido(id_aluno, data_pedido, motivo_log)
+        registrar_historico_pedido(
+            id_aluno, data_pedido, motivo_log, REFEICAO_ATUAL
+        )
 
     # 8. Gera Relatório por E-mail
-    linhas_email = [f'Relatório Auto-Almoço — {agora.strftime("%d/%m/%Y")}']
+    prefixo_teste = '[TESTE] ' if MODO_TESTE else ''
+    linhas_email = [f'{prefixo_teste}Relatório Auto-{titulo_refeicao} — {agora.strftime("%d/%m/%Y")}']
     linhas_email.append(f'Data-alvo: {data_pedido.strftime("%d/%m/%Y")} ({nome_dia_semana})')
     
     total_sucesso = sum(1 for _, ok, _, _, _, _ in detalhes_execucao if ok)
@@ -140,7 +188,10 @@ def principal():
         status_txt = 'OK ' if ok else 'FALHOU'
         linhas_email.append(f'{pront} | {status_txt} | {ini}→{fim} | {tent} | {msg}')
         
-    enviar_email('Relatório Auto-Almoço', '\n'.join(linhas_email))
+    enviar_email(
+        f'{prefixo_teste}Relatório Auto-{titulo_refeicao}',
+        '\n'.join(linhas_email),
+    )
 
     # 9. Envia Alerta no WhatsApp (apenas erros relevantes)
     lista_erros = [
@@ -150,7 +201,7 @@ def principal():
     
     if lista_erros:
         corpo_zap = []
-        corpo_zap.append('🚨 *Falhas no Auto-Almoço:*')
+        corpo_zap.append(f'🚨 *Falhas no Auto-{titulo_refeicao}:*')
         corpo_zap.append(agora.strftime('%d/%m %H:%M'))
         corpo_zap.append(f'Prato: {texto_prato_dia}')
         corpo_zap.append('')
@@ -176,7 +227,7 @@ if __name__ == '__main__':
             from sistema_pedido.configuracao import FUSO_HORARIO
             agora = datetime.now(FUSO_HORARIO).strftime('%d/%m %H:%M')
             notificar_administradores(
-                f"💀 *ERRO FATAL no Auto-Almoço*\n"
+                f"💀 *ERRO FATAL no Auto-{REFEICAO_ATUAL.titulo}*\n"
                 f"{agora}\n\n"
                 f"O script quebrou antes de terminar:\n"
                 f"```{str(e)[:500]}```"

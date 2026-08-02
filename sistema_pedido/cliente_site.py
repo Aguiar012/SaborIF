@@ -7,6 +7,7 @@ from sistema_pedido.configuracao import (
     URL_PRINCIPAL, TEMPO_TIMEOUT, FUSO_HORARIO, HORA_CORTE, MINUTO_CORTE
 )
 from sistema_pedido.banco_dados import atualizar_prato_dia, buscar_prato_por_data
+from sistema_pedido.refeicoes import obter_refeicao
 
 # Mensagens de erro que não precisamos alertar o admin (são "erros" normais de fluxo)
 PADROES_ERRO_IGNORAR = [
@@ -179,14 +180,15 @@ def buscar_cardapio_site(sessao, data_pedido=None):
         logging.error(f"Erro ao ler cardápio do site: {e}")
         return "(erro na atualização)"
 
-def realizar_pedido(sessao, prontuario: str):
-    """Envia a requisição POST para fazer o pedido."""
+def realizar_pedido(sessao, prontuario: str, refeicao='almoco'):
+    """Envia o pedido de almoco ou jantar para o SICA."""
     try:
+        refeicao = obter_refeicao(refeicao)
         token = obter_token_csrf(sessao, URL_PRINCIPAL)
         dados = {
             'csrfmiddlewaretoken': token, 
             'prontuario': prontuario, 
-            'tipo': '1' # Código para almoço padrão?
+            'tipo': refeicao.codigo_sica
         }
         cabecalhos = {'Referer': URL_PRINCIPAL}
         

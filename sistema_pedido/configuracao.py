@@ -1,8 +1,23 @@
 import os
 import logging
 from zoneinfo import ZoneInfo
+from sistema_pedido.refeicoes import obter_refeicao
 
 # === Configurações Gerais do Sistema ===
+
+# Refeicao processada nesta execucao. Mantem almoco como padrao para que as
+# execucoes antigas continuem funcionando enquanto o jantar e implantado.
+REFEICAO_ATUAL = obter_refeicao(os.getenv('REFEICAO', 'almoco'))
+
+# Execucoes manuais podem ser limitadas a um unico prontuario. O GitHub
+# Actions ativa esse modo por padrao para evitar pedidos em massa por engano.
+MODO_TESTE = os.getenv('MODO_TESTE', 'false').strip().lower() in {
+    '1', 'true', 'sim', 'yes'
+}
+PRONTUARIO_TESTE = os.getenv('PRONTUARIO_TESTE', '').strip()
+SIMULAR_PEDIDO = os.getenv('SIMULAR_PEDIDO', 'false').strip().lower() in {
+    '1', 'true', 'sim', 'yes'
+}
 
 # URL do site do refeitório onde os pedidos são feitos
 URL_PRINCIPAL = 'http://200.133.203.133/home'
@@ -63,6 +78,11 @@ def validar_configuracao():
     if not URL_BANCO_DADOS:
         erros.append("DATABASE_URL não definido")
     
+    if MODO_TESTE and not PRONTUARIO_TESTE:
+        raise ValueError(
+            "MODO_TESTE esta ativo, mas PRONTUARIO_TESTE nao foi informado."
+        )
+
     if erros:
         logging.warning("⚠️ Algumas configurações estão faltando: %s", ", ".join(erros))
     else:

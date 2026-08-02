@@ -1,26 +1,72 @@
-name: AlmoPT
+name: Pedidos do SaborIF
 
 on:
   workflow_dispatch:
+    inputs:
+      refeicao:
+        description: Refeicao que sera processada
+        required: true
+        default: almoco
+        type: choice
+        options:
+          - almoco
+          - jantar
+      modo_teste:
+        description: Processar somente o prontuario de teste
+        required: true
+        default: true
+        type: boolean
+      prontuario_teste:
+        description: PT usado no teste (obrigatorio no modo de teste)
+        required: false
+        type: string
+      simular_pedido:
+        description: Simular sem enviar pedido ao refeitorio
+        required: true
+        default: true
+        type: boolean
   schedule:
     - cron: '0 09 * * 1-5'
     - cron: '0 16 * * 1-5'
 
+concurrency:
+  group: pedidos-refeitorio
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
 jobs:
-  almoco:
+  pedidos:
+    name: Pedidos - ${{ matrix.refeicao }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        refeicao: ${{ fromJSON(github.event_name == 'workflow_dispatch' && format('["{0}"]', inputs.refeicao) || '["almoco","jantar"]') }}
+    env:
+      REFEICAO: ${{ matrix.refeicao }}
+      MODO_TESTE: ${{ github.event_name == 'workflow_dispatch' && inputs.modo_teste || false }}
+      PRONTUARIO_TESTE: ${{ github.event_name == 'workflow_dispatch' && inputs.prontuario_teste || '' }}
+      SIMULAR_PEDIDO: ${{ github.event_name == 'workflow_dispatch' && inputs.simular_pedido || false }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v7
         with:
           python-version: '3.x'
 
       - name: Install deps
         run: pip install requests beautifulsoup4 psycopg[binary]
 
-      - name: Run AlmoPT
+      - name: Mostrar modo da execucao
+        run: |
+          echo "Refeicao: $REFEICAO"
+          echo "Modo de teste: $MODO_TESTE"
+          echo "Simulacao sem pedido: $SIMULAR_PEDIDO"
+
+      - name: Executar pedidos
         env:
           EMAIL_USER:  ${{ secrets.EMAIL_USER }}
           EMAIL_PASS:  ${{ secrets.EMAIL_PASS }}
