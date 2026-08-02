@@ -8,6 +8,7 @@ import { gerarImagemEmailCancelamento } from "./renderizar_email.js";
 import {
     analisarComandoCancelamento,
     criarMensagemConfirmacaoTroca,
+    interpretarConfirmacaoTroca,
     obterRefeicao,
 } from "./refeicoes.js";
 
@@ -1103,10 +1104,10 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
 
         if (usuario.etapa === "CONFIRMAR_TROCA_REFEICAO") {
             const refeicaoDesejada = usuario.dados_temporarios?.refeicaoDesejada;
-            let acao = "INCONCLUSIVO";
-            if (["nao", "não", "n", "cancelar_troca_refeicao"].includes(textoNorm)) acao = "NAO";
-            else if (["sim", "s", "ok", "confirmar_troca_refeicao"].includes(textoNorm)) acao = "SIM";
-            else acao = await assistenteIA.interpretarConfirmacao(texto);
+            let acao = interpretarConfirmacaoTroca(texto);
+            if (acao === "INCONCLUSIVO") {
+                acao = await assistenteIA.interpretarConfirmacao(texto);
+            }
 
             if (acao === "NAO") {
                 atualizarUsuario(chaveUsuario, { etapa: "MENU_PRINCIPAL", dados_temporarios: {} });
