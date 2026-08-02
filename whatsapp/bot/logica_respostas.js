@@ -5,7 +5,11 @@ const { Pool } = pkg;
 import nodemailer from "nodemailer";
 import { criarAssistenteIA } from "./inteligencia_artificial.js";
 import { gerarImagemEmailCancelamento } from "./renderizar_email.js";
-import { detectarRefeicao, obterRefeicao } from "./refeicoes.js";
+import {
+    analisarComandoCancelamento,
+    detectarRefeicao,
+    obterRefeicao,
+} from "./refeicoes.js";
 
 function apenasDigitos(s = "") { return (s || "").replace(/\D/g, ""); }
 
@@ -826,12 +830,13 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
             "*Legenda dos Dias:*\n" +
             "✅ *Já Pedi:* O bot já fez o pedido no SUAP.\n" +
             "📅 *Vou Comer:* Está agendado, o bot vai pedir no dia.\n" +
-            "❌ *Não Vou:* Você não almoça ou cancelou este dia.\n" +
+            "❌ *Não Vou:* Você não configurou ou cancelou este dia.\n" +
             "⚠️ *Atenção:* Houve algum erro, verifique no SUAP.\n\n" +
 
             "*Comandos Principais:*\n" +
-            "🔹 *Cancelar Almoço:* Cancela o pedido de um dia específico.\n" +
+            "🔹 *Cancelar Refeição:* Escolha almoço ou jantar e o dia.\n" +
             "🔹 *Definir Dias:* Escolha seus dias padrão de almoço (ex: seg, qua).\n" +
+            "🔹 *Configurar Jantar:* Escolha separadamente os dias de jantar.\n" +
             "🔹 *Bloquear Prato:* Impedir pedidos se tiver certo prato (ex: peixe).\n" +
             "🔹 *Ativar/Desativar:* Liga ou desliga o robô temporariamente.\n\n" +
 
@@ -840,11 +845,12 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
     }
 
     const MENSAGEM_BOAS_VINDAS = criarTexto(
-        "*IFSP Pirituba - Assistente de Almoço*\n\n" +
-        "Esse bot *pede seu almoço automaticamente* no site do SUAP todo dia de manhã!\n\n" +
+        "*IFSP Pirituba - Assistente de Refeições*\n\n" +
+        "Esse bot pede *almoço e jantar automaticamente* no sistema do refeitório!\n\n" +
         "Você só precisa:\n" +
         "1. Vincular seu prontuário IFSP\n" +
-        "2. Escolher quais dias da semana você almoça\n\n" +
+        "2. Escolher quais dias da semana você almoça\n" +
+        "3. Se quiser, configurar o jantar pela opção 9\n\n" +
         "Depois disso, o bot cuida do resto. Se não quiser comer algum dia, é só cancelar pelo bot.\n\n" +
         "Envie *continuar* para começar o cadastro."
     );
@@ -1399,6 +1405,20 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
                 );
             }
 
+            const comandoPendente = usuario.dados_temporarios?.comandoPendente;
+            if (comandoPendente) {
+                atualizarUsuario(chaveUsuario, {
+                    etapa: "MENU_PRINCIPAL",
+                    dados_temporarios: {},
+                });
+                return processarTexto(
+                    jid,
+                    `${comandoPendente} ${refeicaoEscolhida}`,
+                    false,
+                    true
+                );
+            }
+
             const diasPreferidos = await conectarBanco(c =>
                 obterDiasPreferidos(c, alunoAtual.id, refeicaoEscolhida)
             );
@@ -1478,18 +1498,17 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
         }
 
         if (textoNorm.startsWith("cancelar") || (textoNorm.includes("nao vou") && textoNorm !== 'nao')) {
-            const refeicaoCancelamento = detectarRefeicao(textoNorm).nome;
-            const mencionouRefeicao = /\b(almoco|janta|jantar)\b/.test(textoNorm);
-            const comandoSemRefeicao = textoNorm
-                .replace(/\b(almoco|janta|jantar)\b/g, "")
-                .replace(/\s+/g, " ")
-                .trim();
+            const {
+                refeicao: refeicaoCancelamento,
+                mencionouRefeicao,
+                comandoSemRefeicao,
+            } = analisarComandoCancelamento(textoNorm);
             
             // Sem mencionar a refeicao, pergunta para evitar cancelar a errada.
-            if (comandoSemRefeicao === "cancelar" && !mencionouRefeicao) {
+            if (!mencionouRefeicao) {
                  atualizarUsuario(chaveUsuario, {
                      etapa: "ESCOLHER_REFEICAO_CANCELAMENTO",
-                     dados_temporarios: {},
+                     dados_temporarios: { comandoPendente: textoNorm },
                  });
                  return criarTexto("Qual refeição você quer cancelar?\n\n1. Almoço\n2. Jantar");
             }
@@ -1637,11 +1656,14 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
         // -- Fallback: tenta classificar com IA (so uma vez, evitar loop) --
         if (!jaUsouIA) {
             // Monta contexto do usuario para a IA
-            const diasCadastrados = await conectarBanco(c => obterDiasPreferidos(c, alunoAtual.id));
+            const diasAlmoco = dadosSemana?.diasAlmoco || [];
+            const diasJantar = dadosSemana?.diasJantar || [];
             const bloqueiosUsuario = await conectarBanco(c => obterBloqueios(c, alunoAtual.id));
             const dadosParaIA = {
                 nome: alunoAtual.nome || alunoAtual.prontuario,
-                diasCadastrados,
+                diasCadastrados: diasAlmoco,
+                diasAlmoco,
+                diasJantar,
                 bloqueios: bloqueiosUsuario,
                 ativo: alunoAtual.ativo,
                 ultimoPedido: dadosSemana?.pedidos?.[0] ? `${dadosSemana.pedidos[0].dia_pedido} - ${dadosSemana.pedidos[0].motivo}` : null

@@ -24,3 +24,18 @@ export function detectarRefeicao(texto, padrao = "almoco") {
     if (/\balmoco\b/.test(normalizado)) return REFEICOES.almoco;
     return obterRefeicao(padrao);
 }
+
+export function analisarComandoCancelamento(texto) {
+    const normalizado = semAcentos(texto);
+    const mencionouRefeicao = /\b(almoco|janta|jantar)\b/.test(normalizado);
+    const comandoSemRefeicao = normalizado
+        .replace(/\b(almoco|janta|jantar)\b/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    return {
+        refeicao: detectarRefeicao(normalizado).nome,
+        mencionouRefeicao,
+        comandoSemRefeicao,
+    };
+}

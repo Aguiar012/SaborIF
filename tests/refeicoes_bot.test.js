@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+    analisarComandoCancelamento,
     detectarRefeicao,
     obterRefeicao,
 } from "../whatsapp/bot/refeicoes.js";
@@ -23,6 +24,17 @@ test("detecta a refeicao mencionada em uma frase", () => {
     assert.equal(detectarRefeicao("quero cancelar a janta").nome, "jantar");
     assert.equal(detectarRefeicao("alterar dias do almoço").nome, "almoco");
     assert.equal(detectarRefeicao("alterar dias").nome, "almoco");
+});
+
+test("nao adivinha a refeicao de um cancelamento ambiguo", () => {
+    const ambiguo = analisarComandoCancelamento("cancelar quarta");
+    assert.equal(ambiguo.mencionouRefeicao, false);
+    assert.equal(ambiguo.comandoSemRefeicao, "cancelar quarta");
+
+    const jantar = analisarComandoCancelamento("cancelar jantar quarta");
+    assert.equal(jantar.mencionouRefeicao, true);
+    assert.equal(jantar.refeicao, "jantar");
+    assert.equal(jantar.comandoSemRefeicao, "cancelar quarta");
 });
 
 test("gera o preview de cancelamento de jantar", async () => {

@@ -73,44 +73,50 @@ ${PRATOS_CARDAPIO_IFSP.join(", ")}`;
 const COMANDOS_VALIDOS = [
     "cancelar", "status", "historico",
     "preferencia", "bloquear", "desbloquear",
-    "ativar", "desativar", "ajuda"
+    "ativar", "desativar", "ajuda", "jantar"
 ];
 
-const PROMPT_SISTEMA = `Você é o assistente do bot de almoço do IFSP.
+const PROMPT_SISTEMA = `Você é o assistente do bot de refeições do IFSP.
 
 COMO O SISTEMA FUNCIONA:
-- O bot pede almoço AUTOMATICAMENTE de manhã nos dias que o aluno escolheu
-- Se o aluno NÃO quer comer, precisa CANCELAR antes
+- O bot pede almoço e jantar automaticamente, cada um nos dias que o aluno escolheu
+- As preferências de almoço e jantar são separadas
+- Se o aluno NÃO quer uma refeição, precisa CANCELAR antes
 - Pratos bloqueados são pulados automaticamente
-- O aluno pode configurar dias, bloquear pratos, ver status e historico
+- O aluno pode configurar dias de almoço e jantar, bloquear pratos, ver status e histórico
 
 FORMATO DA SUA RESPOSTA:
 - Se o usuario quer EXECUTAR uma acao, responda: COMANDO:nome_do_comando
-  Comandos validos base: cancelar, status, historico, preferencia, bloquear, desbloquear, ativar, desativar
-- Se for para cancelar um dia especifico, responda: COMANDO:cancelar dia_da_semana (ex: COMANDO:cancelar amanha, COMANDO:cancelar quarta)
+  Comandos validos base: cancelar, status, historico, preferencia, jantar, bloquear, desbloquear, ativar, desativar
+- Para configurar dias de jantar, responda: COMANDO:jantar
+- Se a refeição estiver clara no cancelamento, preserve-a no comando (ex: COMANDO:cancelar jantar quarta)
+- Se a refeição estiver ambígua, não adivinhe; responda o cancelamento sem refeição para o bot perguntar
 - Se o usuario faz uma PERGUNTA ou tem DUVIDA, responda em texto curto (1-2 frases) usando os dados do usuario
-- NUNCA responda COMANDO:ajuda para perguntas sobre o sistema. So use COMANDO:ajuda se a mensagem nao tem relacao com almoço
+- NUNCA responda COMANDO:ajuda para perguntas sobre o sistema. So use COMANDO:ajuda se a mensagem nao tem relação com refeições
 
 EXEMPLOS:
 Usuario (cadastrado seg,qua,sex): "amanha vai pedir pra mim?"
-Se amanha e segunda: "Sim, amanha e segunda e voce esta cadastrado. O almoço sera pedido automaticamente de manha."
+Se amanha e segunda: responda usando separadamente os dias de almoço e jantar do contexto.
 Se amanha e sabado: "Nao, amanha e sabado e voce so esta cadastrado para seg, qua e sex."
 
 Usuario: "nao vou comer amanha" ou "cancelar almoco de terca"
-Resposta: COMANDO:cancelar amanha ou COMANDO:cancelar terca
+Resposta: COMANDO:cancelar amanha ou COMANDO:cancelar almoco terca
+
+Usuario: "quero jantar terça e quinta"
+Resposta: COMANDO:jantar
 
 Usuario: "como funciona esse bot?"
-Resposta: "O bot pede seu almoço automaticamente nos dias que voce cadastrou (antes das 8h). Se nao quiser comer algum dia, e so cancelar."
+Resposta: "O bot pede almoço e jantar automaticamente nos dias cadastrados para cada refeição. Se não quiser alguma delas, é só cancelar."
 
 Usuario: "quero ver meus dados"
 Resposta: COMANDO:status
 
 Usuario: "o que acontece se tiver peixe?"
-Se peixe esta bloqueado: "Peixe esta na sua lista de bloqueios, entao o bot nao vai pedir almoço quando o prato do dia for peixe."
+Se peixe esta bloqueado: "Peixe esta na sua lista de bloqueios, entao o bot nao vai pedir a refeição quando o prato do dia for peixe."
 Se nao esta bloqueado: "O bot vai pedir normalmente. Se nao gosta de peixe, use o comando 'bloquear' para adicionar."
 
 Usuario: "oi tudo bem?" ou "bom dia"
-Resposta: (Responda de forma amigavel, curta e natural, retribuindo a saudacao e perguntando se precisa de ajuda com o almoco)
+Resposta: (Responda de forma amigável, curta e natural, retribuindo a saudação e perguntando se precisa de ajuda com as refeições)
 
 REGRAS:
 - Maximo 2 frases
@@ -191,12 +197,12 @@ function gerarContextoUsuario(dadosUsuario) {
     const partes = [];
     partes.push(`Nome: ${dadosUsuario.nome || "desconhecido"} `);
 
-    if (dadosUsuario.diasCadastrados && dadosUsuario.diasCadastrados.length) {
-        const nomesDias = dadosUsuario.diasCadastrados.map(d => NOMES_DIAS[d] || d).join(", ");
-        partes.push(`Dias cadastrados: ${nomesDias} `);
-    } else {
-        partes.push("Dias cadastrados: nenhum definido");
-    }
+    const diasAlmoco = dadosUsuario.diasAlmoco || dadosUsuario.diasCadastrados || [];
+    const diasJantar = dadosUsuario.diasJantar || [];
+    const nomesAlmoco = diasAlmoco.map(d => NOMES_DIAS[d] || d).join(", ") || "nenhum";
+    const nomesJantar = diasJantar.map(d => NOMES_DIAS[d] || d).join(", ") || "nenhum";
+    partes.push(`Dias de almoco: ${nomesAlmoco} `);
+    partes.push(`Dias de jantar: ${nomesJantar} `);
 
     if (dadosUsuario.bloqueios && dadosUsuario.bloqueios.length) {
         partes.push(`Pratos bloqueados: ${dadosUsuario.bloqueios.join(", ")} `);

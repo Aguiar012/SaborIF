@@ -2,9 +2,9 @@
 
 # IF Food
 
-### Bot de Almoço Automatizado do IFSP Pirituba
+### Bot de Refeições Automatizado do IFSP Pirituba
 
-Pede almoço automaticamente no refeitório e permite gerenciar tudo pelo WhatsApp.
+Pede almoço e jantar automaticamente no refeitório e permite gerenciar tudo pelo WhatsApp.
 
 <br>
 
@@ -26,7 +26,7 @@ O sistema tem duas partes que trabalham juntas:
 | Parte | Linguagem | O que faz |
 |-------|-----------|-----------|
 | **Bot WhatsApp** | Node.js | Conversa com o aluno, gerencia cadastro, bloqueios e cancelamentos |
-| **Pedidos Automaticos** | Python | Roda todo dia de manha via GitHub Actions e faz os pedidos no site do refeitorio |
+| **Pedidos Automaticos** | Python | Roda em horários separados via GitHub Actions e faz os pedidos no site do refeitorio |
 
 ```
 Aluno cadastra pelo WhatsApp
@@ -36,7 +36,7 @@ Aluno cadastra pelo WhatsApp
         |
         v
   Todo dia de manha, o script Python:
-    1. Busca quem quer almocar naquele dia
+    1. Busca quem escolheu aquela refeicao e aquele dia
     2. Checa se o prato do dia esta na lista de exclusao do aluno
     3. Faz o pedido no site do refeitorio
     4. Avisa o aluno se o pedido foi bloqueado
@@ -50,17 +50,17 @@ Aluno cadastra pelo WhatsApp
 ### Bot WhatsApp
 
 - **Cadastro** com prontuario IFSP
-- **Escolher dias** da semana para almocar
+- **Escolher dias** diferentes para almoço e jantar
 - **Bloquear pratos** que o aluno nao come (ex: peixe, figado)
 - **Sugestoes inteligentes** — Gemini sugere pratos relacionados ao bloquear (ex: bloqueia "peixe", sugere "tilapia", "merluza")
-- **Cancelar almoco** de um dia especifico (direto ou por e-mail a CAE)
+- **Cancelar almoço ou jantar** de um dia especifico (direto ou por e-mail a CAE)
 - **Ver status** do cadastro e historico de pedidos
 - **Ativar/Pausar** o bot a qualquer momento
 - **IA contextual** — entende mensagens em linguagem natural via Gemini
 
 ### Pedidos Automaticos
 
-- Roda **seg-sex as 6h e 13h** (GitHub Actions)
+- Roda **seg-sex às 6h para almoço e às 13h para jantar** (GitHub Actions)
 - Compara o prato do dia com a lista de exclusao de cada aluno
 - **Notifica o aluno** por WhatsApp quando o pedido e bloqueado
 - **Alerta os admins** por WhatsApp em caso de erro
@@ -185,8 +185,8 @@ Os pedidos sao agendados via **GitHub Actions** (`.github/workflows/main.yml`):
 
 | Horario (BRT) | Cron (UTC) | Objetivo |
 |---------------|------------|----------|
-| 06:00 | `0 09 * * 1-5` | Pedido principal da manha |
-| 13:00 | `0 16 * * 1-5` | Segunda tentativa (se o primeiro falhar) |
+| 06:00 | `0 09 * * 1-5` | Pedidos de almoço |
+| 13:00 | `0 16 * * 1-5` | Pedidos de jantar |
 
 ---
 
