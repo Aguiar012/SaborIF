@@ -1017,9 +1017,49 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
                 if (!/^\d{5,12}X?$/.test(pront)) {
                     return criarTexto("Formato invalido. Digite apenas números do prontuário (ex: 3029791 ou 303013X).");
                 }
-                atualizarUsuario(chaveUsuario, { etapa: "AGUARDANDO_DIAS", dados_temporarios: { prontuario: pront } });
-                return menuDiasSemana("Prontuário recebido! Agora escolha os *dias da semana* que voce almoca:");
+                atualizarUsuario(chaveUsuario, {
+                    etapa: "AGUARDANDO_REFEICAO",
+                    dados_temporarios: { prontuario: pront },
+                });
+
+                return criarTexto(
+                    "*Prontuário recebido!*\n\n" +
+                    "Qual refeição você quer pedir pelo bot?\n\n" +
+                    "1. Almoço\n" +
+                    "2. Jantar"
+                );
             }
+            if (usuario.etapa === "AGUARDANDO_REFEICAO") {
+                let refeicao = null;
+            
+                if (["1", "almoco", "almoço"].includes(textoNorm)) {
+                    refeicao = "almoco";
+                } else if (["2", "jantar", "janta"].includes(textoNorm)) {
+                    refeicao = "jantar";
+                }
+            
+                if (!refeicao) {
+                    return criarTexto(
+                        "Não entendi. Escolha uma opção:\n\n" +
+                        "1. Almoço\n" +
+                        "2. Jantar"
+                    );
+                }
+            
+                atualizarUsuario(chaveUsuario, {
+                    etapa: "AGUARDANDO_DIAS",
+                    dados_temporarios: {
+                        ...usuario.dados_temporarios,
+                        refeicao,
+                    },
+                });
+            
+                return menuDiasSemana(
+                    "Ótimo! Agora escolha os dias em que você vai pedir a refeição:",
+                    refeicao
+                );
+            }
+            
 
             if (textoNorm.includes("continuar") || textoNorm === "continuar_cadastro") {
                 atualizarUsuario(chaveUsuario, { etapa: "AGUARDANDO_PRONTUARIO", dados_temporarios: {} });
@@ -1040,11 +1080,13 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
                 if (!dias.length) return criarTexto("Não entendi. Digite os dias (ex: seg, ter).");
 
                 const pront = usuario.dados_temporarios?.prontuario;
+                const refeicao = usuario.dados_temporarios?.refeicao || "almoco";
 
                 const res = await conectarBanco(async c => {
                     const vinculo = await vincularAlunoContato(c, { prontuario: pront, telefone: telefone });
                     if (!vinculo.ok) return vinculo;
                     await salvarPreferenciasDias(c, vinculo.alunoId, dias);
+                    await alterarRefeicao(c, vinculo.alunoId, refeicao);
                     await alterarStatusAtivo(c, vinculo.alunoId, true);
                     return vinculo;
                 });
@@ -1065,14 +1107,72 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
                     return criarTexto("Erro no sistema.");
                 }
 
-                atualizarUsuario(chaveUsuario, { etapa: "MENU_PRINCIPAL", dados_temporarios: {}, aluno_id: res.alunoId });
-                return menuPrincipalInterativo({ nome: res.aluno.nome }, pratoAtual);
+                atualizarUsuario(chaveUsuario, {
+                    etapa: "AGUARDANDO_BLOQUEIOS_CADASTRO",
+                    dados_temporarios: {},
+                    aluno_id: res.alunoId,
+                });
+
+                return criarTexto(
+                    "Refeição e dias configurados! ✅\n\n" +
+                    "Há algum prato que você não come?\n\n" +
+                    "Envie os nomes separados por vírgula.\n" +
+                    "Exemplo: *peixe, fígado*\n\n" +
+                    "Se come de tudo, responda *pular*."
+                );
             }
             return MENSAGEM_BOAS_VINDAS;
         }
 
         // ================= ALUNO LOGADO =================
         const alunoAtual = aluno;
+        if (usuario.etapa === "AGUARDANDO_BLOQUEIOS_CADASTRO") {
+            const respostasParaPular = [
+                "pular",
+                "nao",
+                "não",
+                "n",
+                "como tudo",
+                "como de tudo",
+                "come tudo",
+                "nenhum",
+            ];
+    
+            if (respostasParaPular.includes(textoNorm)) {
+                atualizarUsuario(chaveUsuario, {
+                    etapa: "MENU_PRINCIPAL",
+                    dados_temporarios: {},
+                });
+                const primeiroNome = alunoAtual.nome?.trim().split(/\s+/)[0] || "Aluno";
+                return criarTexto(
+                    `Bem-vindo ao *SaborIF*, ${primeiroNome}! 🎉\n\n` +
+                    "Cadastro concluído! ✅\n\n" +
+                    menuPrincipalInterativo(alunoAtual, pratoAtual, dadosSemana).text
+                );
+            }
+        
+            const itens = texto.split(/[,;\n]+/).map(limparTexto).filter(Boolean);
+        
+            if (!itens.length) {
+                return criarTexto(
+                    "Envie os pratos separados por vírgula ou responda *pular*.\n\n" +
+                    "Exemplo: peixe, fígado"
+                );
+            }
+        
+            await conectarBanco(c => salvarBloqueios(c, alunoAtual.id, itens));
+        
+            atualizarUsuario(chaveUsuario, {
+                etapa: "MENU_PRINCIPAL",
+                dados_temporarios: {},
+            });
+        
+            return criarTexto(
+                `Bem-vindo ao *SaborIF*, ${primeiroNome}! 🎉\n\n` +
+                `Cadastro concluído! ✅\n\nPratos bloqueados: *${itens.join(", ")}*.\n\n` +
+                menuPrincipalInterativo(alunoAtual, pratoAtual, dadosSemana).text
+            );
+        }
 
         async function solicitarTrocaRefeicao(refeicaoDesejada) {
             const refeicaoAtual = obterRefeicao(alunoAtual.refeicao || "almoco");
