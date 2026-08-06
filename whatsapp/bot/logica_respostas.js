@@ -47,16 +47,36 @@ const NOMES_DIAS_SEMANA = ["Domingo", "Segunda-Feira", "Terça-Feira", "Quarta-F
 const NOMES_DIAS_CURTO = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
 function interpretarListaDias(txt = "") {
+    const textoNormalizado = normalizar(txt);
+    if ([
+        "todos",
+        "todos os dias",
+        "todos os dias da semana",
+        "todo dia",
+        "semana toda",
+        "segunda a sexta",
+        "segunda-feira a sexta-feira",
+        "seg a sex",
+        "shinwa",
+        "semana",
+        "de semana",
+        "sempre",
+        "dias",
+    ].includes(textoNormalizado)) {
+        return [1, 2, 3, 4, 5];
+    }
     const mapa = {
         "seg": 1, "segunda": 1, "segunda-feira": 1,
-        "ter": 2, "terca": 2, "terça": 2, "terça-feira": 2,
+        "ter": 2, "terca": 2, "terca-feira": 2,
         "qua": 3, "quarta": 3, "quarta-feira": 3,
         "qui": 4, "quinta": 4, "quinta-feira": 4,
         "sex": 5, "sexta": 5, "sexta-feira": 5,
     };
-    const itens = normalizar(txt).split(/[,\s;/]+/).filter(Boolean);
+    const itens = textoNormalizado.split(/[,\s;/]+/).filter(Boolean);
     const dias = new Set();
-    for (const item of itens) if (mapa[item] != null) dias.add(mapa[item]);
+    for (const item of itens) {
+        if (mapa[item] != null) dias.add(mapa[item]);
+    }
     return [...dias].sort((a, b) => a - b);
 }
 
@@ -865,12 +885,14 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
 
     return criarTexto(
         (motivo || "Escolha os dias da semana:") + "\n\n" +
-            `${pergunta}\n` +
-            `O bot vai pedir seu ${nomeRefeicao} *automaticamente* nesses dias.\n\n` +
-            "Escreva os dias separados por vírgula:\n\n" +
-            "Dias válidos: seg, ter, qua, qui, sex"
-        );
-    }
+        `${pergunta}\n` +
+        `O bot vai pedir seu ${nomeRefeicao} *automaticamente* nesses dias.\n\n` +
+        "Escreva os dias separados por vírgula.\n" +
+        "Exemplo: *seg, qua, sex*\n" +
+        `Se você pede ${nomeRefeicao} todos os dias da semana, responda *Todos*.\n\n` +
+        "Dias válidos: seg, ter, qua, qui, sex"
+    );
+}
 
     // --------- HANDLER PRINCIPAL (LÓGICA DO BOT) ----------
     async function processarTexto(jid, textoBruto, isButton = false, jaUsouIA = false) {
