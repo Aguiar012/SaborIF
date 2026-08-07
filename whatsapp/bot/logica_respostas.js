@@ -1089,7 +1089,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
             }
 
             if (usuario.etapa === "AGUARDANDO_CONSENTIMENTO") {
-                return criarBotoes("Quando quiser começar, é só clicar abaixo.", null, [{ id: "continuar_cadastro", texto: "Continuar" }]);
+                return criarBotoes("Quando quiser começar, é só escrever abaixo.", null, [{ id: "continuar_cadastro", texto: "Continuar" }]);
             }
 
             if (usuario.etapa === "NOVO") {
@@ -1120,7 +1120,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
                         atualizarUsuario(chaveUsuario, { etapa: "AGUARDANDO_PRONTUARIO", dados_temporarios: {} });
                         return criarBotoes(
                             "Prontuário não encontrado na base.\n\n" +
-                            "Se você acha que deveria estar cadastrado, procure a sala do *3° Redes* para regularizar.\n\n" +
+                            "Se você acha que deveria estar cadastrado, procure entrar em contato com os desenvolvedores.\n\n" +
                             "Envie seu *prontuário correto* para tentar novamente.",
                             null, [{ id: "continuar_cadastro", texto: "Tentar De Novo" }]
                         );
@@ -1353,7 +1353,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
             else if (["outro", "cancelar_outro", "outro dia", "2"].includes(textoNorm)) acao = "OUTRO_DIA";
             else acao = await assistenteIA.interpretarConfirmacao(texto);
 
-            // Se clicou em Não/Cancelar
+            // Se digitou Não/Cancelar
             if (acao === "NAO") {
                 atualizarUsuario(chaveUsuario, { etapa: "MENU_PRINCIPAL", dados_temporarios: {} });
                 return criarTexto("Cancelamento abortado.");
@@ -1369,7 +1369,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
                 return criarTexto("Qual dia da semana você quer cancelar?\n\nEscreva o dia (ex: *quarta* ou *segunda*).");
             }
 
-            // Se clicou em Sim
+            // Se digitou Sim/Confirmar
             if (acao === "SIM") {
                 const d = new Date(usuario.dados_temporarios?.dataCancelamento);
                 const metodo = usuario.dados_temporarios?.metodo;
