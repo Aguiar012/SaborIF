@@ -968,8 +968,8 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
         }
 
         // -- Atalhos Globais (REMOVIDO "oi", "ola" para deixar a IA responder) --
-        // Apenas comandos unívocos ficam aqui.
-        if (["ajuda", "menu", "help", "comandos"].includes(textoNorm)) {
+        // Apenas comandos únicos ficam aqui.
+        if (["menu", "comandos", "principal", "start"].includes(textoNorm)) {
             atualizarUsuario(chaveUsuario, { etapa: "MENU_PRINCIPAL", dados_temporarios: {} });
             return menuPrincipalInterativo(aluno || null, pratoAtual, dadosSemana);
         }
@@ -988,11 +988,11 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
             return processarTexto(jid, MAPA_NUMEROS[textoNorm]);
         }
 
-        if (textoNorm === "guia" || textoNorm === "ajuda" || textoNorm === "como funciona") {
+        if (textoNorm === "guia" || textoNorm === "ajuda" || textoNorm === "como funciona" || textoNorm === "socorro") {
             return menuGuia();
         }
 
-        if (textoNorm === "status" || textoNorm === "meu status" || textoNorm === "cadastro") {
+        if (textoNorm === "status" || textoNorm === "meu status" || textoNorm === "cadastro" || textoNorm === "usuario") {
             if (!aluno) return criarTexto(gerarCabecalho(null, null, pratoAtual) + "Seu número ainda *não está vinculado*. Envie: *CONTINUAR*.");
 
             const bloqueiosUsuario = await conectarBanco(c => obterBloqueios(c, aluno.id));
