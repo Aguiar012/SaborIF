@@ -1312,6 +1312,8 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
         // ================= ALUNO LOGADO =================
         const alunoAtual = aluno;
         if (usuario.etapa === "AGUARDANDO_BLOQUEIOS_CADASTRO") {
+            const primeiroNome = alunoAtual.nome?.trim().split(/\s+/)[0] || "Aluno";
+            
             const respostasParaPular = [
                 "pular",
                 "nao",
@@ -1328,7 +1330,6 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
                     etapa: "MENU_PRINCIPAL",
                     dados_temporarios: {},
                 });
-                const primeiroNome = alunoAtual.nome?.trim().split(/\s+/)[0] || "Aluno";
                 return criarTexto(
                     `Bem-vindo ao *SaborIF*, ${primeiroNome}! 🎉\n\n` +
                     "Cadastro concluído! ✅\n\n" +
