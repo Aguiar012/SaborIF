@@ -1,10 +1,10 @@
 <div align="center">
 
-# IF Food
+# SaborIF
 
-### Bot de Refeições Automatizado do IFSP Pirituba
+### Bot de Refeições Automatizadas do IFSP Pirituba
 
-Pede almoço ou jantar automaticamente no refeitório e permite gerenciar tudo pelo WhatsApp.
+Pede almoço ou jantar automaticamente no site SICA e permite gerenciar tudo pelo WhatsApp.
 
 <br>
 
