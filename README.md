@@ -11,7 +11,6 @@ Pede almoço ou jantar automaticamente no refeitório e permite gerenciar tudo p
 ![Node.js](https://img.shields.io/badge/Node.js-20-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.x-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![WhatsApp](https://img.shields.io/badge/WhatsApp-Bot-25D366?style=for-the-badge&logo=whatsapp&logoColor=white)
-![Gemini AI](https://img.shields.io/badge/Gemini-2.5_Flash-4285F4?style=for-the-badge&logo=google&logoColor=white)
 ![Fly.io](https://img.shields.io/badge/Fly.io-Deploy-8B5CF6?style=for-the-badge&logo=flydotio&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-DB-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
 
@@ -54,11 +53,10 @@ Nos horarios agendados, o script Python:
 - **Trocar a refeição com confirmação** — jantar exibe o aviso de autorização da CAE
 - **Escolher dias** da refeição atual; a troca mantém os mesmos dias
 - **Bloquear pratos** que o aluno nao come (ex: peixe, figado)
-- **Sugestoes inteligentes** — Gemini sugere pratos relacionados ao bloquear (ex: bloqueia "peixe", sugere "tilapia", "merluza")
 - **Cancelar a refeição atual** de um dia especifico (direto ou por e-mail a CAE)
 - **Ver status** do cadastro e historico de pedidos
 - **Ativar/Pausar** o bot a qualquer momento
-- **IA contextual** — entende mensagens em linguagem natural via Gemini
+- **Menu interativo** — navegação clara e determinística por números e comandos
 
 ### Pedidos Automaticos
 
@@ -80,7 +78,7 @@ IF_Food/
 |   |-- bot/
 |   |   |-- servidor_bot.js              Servidor Express + conexao Baileys
 |   |   |-- logica_respostas.js          Fluxo de conversa e comandos
-|   |   |-- inteligencia_artificial.js   Gemini: classificacao + sugestoes
+|   |   |-- refeicoes.js                 Regras de almoço/jantar e confirmações
 |   |   '-- renderizar_email.js          Gera imagem do e-mail de cancelamento
 |   '-- configuracao_pastas.js           Paths dos dados persistidos
 |
@@ -130,9 +128,6 @@ Crie um arquivo `.env` na raiz:
 ```env
 # Banco de dados (obrigatorio)
 DATABASE_URL=postgres://usuario:senha@host:5432/banco
-
-# Gemini AI (opcional)
-GEMINI_API_KEY=sua_chave
 
 # E-mail (opcional - para cancelamentos)
 GMAIL_USER=email@gmail.com
@@ -198,7 +193,6 @@ Os pedidos sao agendados via **GitHub Actions** (`.github/workflows/main.yml`):
 | Tecnologia | Uso |
 |------------|-----|
 | **Baileys** | Conexao WhatsApp Web (sem API oficial) |
-| **Gemini 2.5 Flash Lite** | Classificacao de intencao + sugestoes de bloqueio |
 | **Express** | Health check + API de envio de mensagens |
 | **PostgreSQL** | Alunos, preferencias, bloqueios, historico |
 | **BeautifulSoup** | Scraping do site do refeitorio IFSP |

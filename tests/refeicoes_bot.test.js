@@ -5,6 +5,7 @@ import {
     analisarComandoCancelamento,
     criarMensagemConfirmacaoTroca,
     detectarRefeicao,
+    interpretarConfirmacao,
     interpretarConfirmacaoTroca,
     obterRefeicao,
 } from "../whatsapp/bot/refeicoes.js";
@@ -51,6 +52,25 @@ test("aceita o texto mostrado na confirmacao da troca", () => {
     assert.equal(interpretarConfirmacaoTroca("confirmar_troca_refeicao"), "SIM");
     assert.equal(interpretarConfirmacaoTroca("não"), "NAO");
     assert.equal(interpretarConfirmacaoTroca("talvez"), "INCONCLUSIVO");
+});
+
+test("interpreta variacoes comuns de confirmacao e recusa deterministica", () => {
+    assert.equal(interpretarConfirmacao("sim"), "SIM");
+    assert.equal(interpretarConfirmacao("SIMMM"), "SIM");
+    assert.equal(interpretarConfirmacao("1"), "SIM");
+    assert.equal(interpretarConfirmacao("ok"), "SIM");
+    assert.equal(interpretarConfirmacao("com certeza"), "SIM");
+    assert.equal(interpretarConfirmacao("pode ser"), "SIM");
+    assert.equal(interpretarConfirmacao("confirmo"), "SIM");
+    assert.equal(interpretarConfirmacao("confirmar_exclusao_dados"), "SIM");
+    assert.equal(interpretarConfirmacao("nao"), "NAO");
+    assert.equal(interpretarConfirmacao("NÃO"), "NAO");
+    assert.equal(interpretarConfirmacao("2"), "NAO");
+    assert.equal(interpretarConfirmacao("de jeito nenhum"), "NAO");
+    assert.equal(interpretarConfirmacao("cancelar"), "NAO");
+    assert.equal(interpretarConfirmacao("cancelar_abortar"), "NAO");
+    assert.equal(interpretarConfirmacao("cancelar_exclusao_dados"), "NAO");
+    assert.equal(interpretarConfirmacao("invalido xyz"), "INCONCLUSIVO");
 });
 
 test("gera o preview de cancelamento de jantar", async () => {

@@ -76,6 +76,7 @@ jobs:
           
           # Configurações do Bot Próprio
           BOT_URL:     ${{ secrets.BOT_URL }}
+          BOT_API_KEY: ${{ secrets.BOT_API_KEY || secrets.APP_KEY }}
           ADMINS_E164: ${{ secrets.ADMINS_E164 }}
 
           DATABASE_URL: ${{ secrets.DATABASE_URL }} 
@@ -85,6 +86,7 @@ jobs:
         if: failure()
         env:
           BOT_URL:     ${{ secrets.BOT_URL }}
+          BOT_API_KEY: ${{ secrets.BOT_API_KEY || secrets.APP_KEY }}
           ADMINS_E164: ${{ secrets.ADMINS_E164 }}
         run: |
           # Verifica se tem URL configurada
@@ -98,8 +100,9 @@ jobs:
           
           for A in "${ADMINS[@]}"; do
             A="${A//[[:space:]]/}"
-            # Envia POST para o endpoint do seu bot
+            # Envia POST para o endpoint do seu bot com autenticacao
             curl -sS -X POST "${BOT_URL}" \
               -H "Content-Type: application/json" \
+              -H "x-api-key: ${BOT_API_KEY}" \
               -d "{\"number\": \"$A\", \"message\": \"$MSG\"}"
           done

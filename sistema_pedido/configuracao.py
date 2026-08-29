@@ -44,7 +44,9 @@ EMAIL_DESTINO = os.getenv('TO_ADDRESS')
 
 # === Configuração do Bot de Alerta (WhatsApp) ===
 # URL do seu bot (Node.js) que envia as mensagens
-URL_BOT_WHATSAPP = os.getenv('BOT_URL') 
+URL_BOT_WHATSAPP = os.getenv('BOT_URL')
+# Chave de segurança para autenticar requisições na API do bot
+CHAVE_API_BOT = (os.getenv('BOT_API_KEY') or os.getenv('APP_KEY') or '').strip()
 
 # Lista de números de telefone (administradores) que receberão alertas de erro
 # Deve ser uma string separada por vírgulas, ex: "5511999999999,5511888888888"

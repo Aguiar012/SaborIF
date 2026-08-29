@@ -19,7 +19,7 @@ IFood/
 │   ├── 📂 bot/                          ← 🤖 O bot em si
 │   │   ├── 📄 servidor_bot.js              ← ⭐ PRINCIPAL: conecta no WhatsApp
 │   │   ├── 📄 logica_respostas.js          ← Decide o que responder pro aluno
-│   │   └── 📄 inteligencia_artificial.js   ← IA que entende mensagens diferentes
+│   │   └── 📄 refeicoes.js                 ← Regras de refeições e confirmações
 │   └── 📄 configuracao_pastas.js        ← Define onde ficam os arquivos salvos
 │
 └── 📂 sistema_pedido/                ← 🍽️ CÓDIGO DOS PEDIDOS AUTOMÁTICOS (Python)
@@ -86,9 +86,6 @@ Crie um arquivo chamado `.env` na raiz do projeto com este conteúdo:
 # Banco de dados (OBRIGATÓRIO)
 DATABASE_URL=postgres://usuario:senha@servidor:5432/nome_do_banco
 
-# IA do Gemini (opcional - pra respostas inteligentes)
-GEMINI_API_KEY=sua_chave_aqui
-
 # Email pra cancelamento (opcional)
 GMAIL_USER=seu_email@gmail.com
 GMAIL_APP_PASSWORD=sua_senha_de_app
@@ -107,7 +104,7 @@ PROXY_URL=
 ### Bot WhatsApp (Node.js)
 1. `servidor_bot.js` conecta no WhatsApp usando a biblioteca Baileys
 2. Quando alguém manda mensagem, passa pro `logica_respostas.js`
-3. Se a mensagem não bate com nenhum comando, vai pro `inteligencia_artificial.js` (IA do Gemini)
+3. Se a mensagem não bate com nenhum comando, reexibe o menu principal interativo
 
 ### Pedidos Automáticos (Python)
 1. `iniciar_pedidos.py` roda todo dia de manhã (agendado)

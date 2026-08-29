@@ -8,8 +8,13 @@ node_modules/
 # Dados do bot (sessao WhatsApp, logs)
 dados_bot/
 
-# Sistema
+# Sistema e logs
 *.log
+*.txt
+logs/
+temp/
+nul
+site_do_qr_code
 .DS_Store
 Thumbs.db
 
@@ -20,9 +25,12 @@ __pycache__/
 .venv/
 venv/
 
-# IDE
+# IDE e ferramentas
 .vscode/
 .idea/
-
-# Gemini agent
+.claude/
 .gemini/
+SaborIF/
+COMANDOS_SERVIDOR.md
+GITHUB_DEPLOY.md
+Demonstração/

@@ -37,5 +37,5 @@ jobs:
       - name: Testar bot do WhatsApp
         run: |
           node --check whatsapp/bot/logica_respostas.js
-          node --check whatsapp/bot/inteligencia_artificial.js
+          node --check whatsapp/bot/refeicoes.js
           node --test tests/refeicoes_bot.test.js

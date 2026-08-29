@@ -1,11 +1,20 @@
 import requests
 import logging
 import time
-from sistema_pedido.configuracao import URL_BOT_WHATSAPP, ADMINISTRADORES
+from sistema_pedido.configuracao import (
+    URL_BOT_WHATSAPP, ADMINISTRADORES, CHAVE_API_BOT
+)
 
 # Configuração de retry para notificações críticas
 MAX_TENTATIVAS = 3
 ESPERA_ENTRE_TENTATIVAS = 15  # segundos
+
+def _obter_headers_autenticacao() -> dict:
+    headers = {"Content-Type": "application/json"}
+    if CHAVE_API_BOT:
+        headers["x-api-key"] = CHAVE_API_BOT
+        headers["Authorization"] = f"Bearer {CHAVE_API_BOT}"
+    return headers
 
 def notificar_administradores(mensagem: str):
     """
@@ -21,6 +30,7 @@ def notificar_administradores(mensagem: str):
 
     # Limpa espaços e separa por vírgula para pegar cada número
     lista_admins = [num.strip() for num in ADMINISTRADORES.split(',') if num.strip()]
+    headers = _obter_headers_autenticacao()
     
     for numero in lista_admins:
         enviado = False
@@ -30,7 +40,9 @@ def notificar_administradores(mensagem: str):
                     "number": numero,
                     "message": mensagem
                 }
-                resposta = requests.post(URL_BOT_WHATSAPP, json=payload, timeout=15)
+                resposta = requests.post(
+                    URL_BOT_WHATSAPP, json=payload, headers=headers, timeout=15
+                )
                 
                 if resposta.status_code == 200:
                     logging.info(f"📱 Alerta enviado para {numero}")
@@ -68,8 +80,11 @@ def enviar_mensagem_aluno(telefone: str, mensagem: str):
         return
 
     try:
+        headers = _obter_headers_autenticacao()
         payload = {"number": telefone, "message": mensagem}
-        resposta = requests.post(URL_BOT_WHATSAPP, json=payload, timeout=15)
+        resposta = requests.post(
+            URL_BOT_WHATSAPP, json=payload, headers=headers, timeout=15
+        )
 
         if resposta.status_code == 200:
             logging.info(f"📱 Mensagem enviada para aluno {telefone}")

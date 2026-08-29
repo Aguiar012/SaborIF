@@ -3,11 +3,11 @@ import path from "path";
 import pkg from "pg";
 const { Pool } = pkg;
 import nodemailer from "nodemailer";
-import { criarAssistenteIA } from "./inteligencia_artificial.js";
 import { gerarImagemEmailCancelamento } from "./renderizar_email.js";
 import {
     analisarComandoCancelamento,
     criarMensagemConfirmacaoTroca,
+    interpretarConfirmacao,
     interpretarConfirmacaoTroca,
     obterRefeicao,
 } from "./refeicoes.js";
@@ -396,9 +396,7 @@ function criarLista(texto, tituloBotao, secoes = []) {
 
 // -----------------------------------------------------
 
-export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, logger = console, chaveGemini = "" }) {
-    // Inicializa assistente de IA (classificador de intencoes)
-    const assistenteIA = criarAssistenteIA(chaveGemini, logger);
+export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, logger = console }) {
     // --------- Armazenamento de Estado ----------
     const ARQUIVO_ESTADO = path.join(diretorioDados, "estado_fluxo_conversa.json");
     let estado = {};
@@ -722,6 +720,24 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
         await c.query(`UPDATE aluno SET refeicao=$2 WHERE id=$1`, [alunoId, refeicaoNormalizada]);
     }
 
+    async function excluirTodosDadosAluno(c, alunoId) {
+        if (!alunoId || typeof alunoId !== "number") {
+            throw new Error(`ID de aluno inválido para exclusão: ${alunoId}`);
+        }
+        await c.query("BEGIN");
+        try {
+            await c.query(`DELETE FROM contato WHERE aluno_id = $1`, [alunoId]);
+            await c.query(`DELETE FROM preferencia_dia WHERE aluno_id = $1`, [alunoId]);
+            await c.query(`DELETE FROM prato_bloqueado WHERE aluno_id = $1`, [alunoId]);
+            await c.query(`DELETE FROM pedido WHERE aluno_id = $1`, [alunoId]);
+            await c.query(`DELETE FROM aluno WHERE id = $1`, [alunoId]);
+            await c.query("COMMIT");
+        } catch (e) {
+            await c.query("ROLLBACK");
+            throw e;
+        }
+    }
+
     async function obterDiasPreferidos(c, alunoId) {
         const { rows } = await c.query(
             `SELECT dia_semana FROM preferencia_dia
@@ -858,7 +874,8 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
             "🔹 *Definir Dias:* Escolha seus dias padrão (ex: seg, qua).\n" +
             "🔹 *Trocar Almoço/Jantar:* Troca sua refeição sem apagar dias ou bloqueios.\n" +
             "🔹 *Bloquear Prato:* Impedir pedidos da sua refeição se tiver certo prato (ex: peixe).\n" +
-            "🔹 *Ativar/Desativar:* Liga ou desliga o robô temporariamente.\n\n" +
+            "🔹 *Ativar/Desativar:* Liga ou desliga o robô temporariamente.\n" +
+            "🔹 *Excluir Dados:* Envie *excluir dados* para apagar definitivamente seu cadastro (LGPD).\n\n" +
 
             "Dica: Digite comandos diretos como *cancelar amanhã* ou *não como peixe*."
         );
@@ -1227,10 +1244,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
 
         if (usuario.etapa === "CONFIRMAR_TROCA_REFEICAO") {
             const refeicaoDesejada = usuario.dados_temporarios?.refeicaoDesejada;
-            let acao = interpretarConfirmacaoTroca(texto);
-            if (acao === "INCONCLUSIVO") {
-                acao = await assistenteIA.interpretarConfirmacao(texto);
-            }
+            const acao = interpretarConfirmacao(texto);
 
             if (acao === "NAO") {
                 atualizarUsuario(chaveUsuario, { etapa: "MENU_PRINCIPAL", dados_temporarios: {} });
@@ -1257,6 +1271,37 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
             );
         }
 
+        if (usuario.etapa === "CONFIRMAR_EXCLUSAO_DADOS") {
+            const acao = interpretarConfirmacao(texto);
+
+            if (acao === "NAO") {
+                atualizarUsuario(chaveUsuario, { etapa: "MENU_PRINCIPAL", dados_temporarios: {} });
+                return criarTexto("Exclusão de dados cancelada. Seu cadastro e agendamentos foram mantidos.");
+            }
+
+            if (acao === "SIM") {
+                if (alunoAtual?.id) {
+                    await conectarBanco(c => excluirTodosDadosAluno(c, alunoAtual.id));
+                }
+                delete estado[chaveUsuario];
+                salvarEstado();
+                return criarTexto(
+                    "Seus dados foram excluídos com sucesso do sistema SaborIF.\n\n" +
+                    "Caso queira utilizar o serviço novamente no futuro, basta enviar *continuar* para realizar um novo cadastro."
+                );
+            }
+
+            return criarBotoes(
+                "Opção não reconhecida.\n\n" +
+                "Deseja realmente excluir todos os seus dados do sistema?",
+                "Confirmar exclusão",
+                [
+                    { id: "confirmar_exclusao_dados", texto: "1. Sim, excluir meus dados" },
+                    { id: "cancelar_exclusao_dados", texto: "2. Cancelar" }
+                ]
+            );
+        }
+
         if (usuario.etapa === "DEFINIR_DIAS") {
             const dias = interpretarListaDias(texto);
             if (!dias.length) return criarTexto("Selecione pelo menos um dia.");
@@ -1269,27 +1314,6 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
             const itens = texto.split(/[,;\n]+/).map(limparTexto).filter(Boolean);
             if (!itens.length) return criarTexto("Envie os nomes dos pratos (ex: peixe, figado).");
             await conectarBanco(c => salvarBloqueios(c, alunoAtual.id, itens));
-
-            // Pede sugestões ao Gemini (não bloqueia se falhar)
-            try {
-                const sugestoes = await assistenteIA.sugerirBloqueios(itens);
-                if (sugestoes.length > 0) {
-                    atualizarUsuario(chaveUsuario, {
-                        etapa: "CONFIRMAR_SUGESTOES_BLOQUEIO",
-                        dados_temporarios: { sugestoes, itensBloqueados: itens }
-                    });
-                    const listaSugestoes = sugestoes.map((s, i) => `${i + 1}. ${s}`).join("\n");
-                    return criarTexto(
-                        `*Bloqueios adicionados:* ${itens.join(", ")}\n\n` +
-                        `Baseado no que você bloqueou, talvez queira bloquear também:\n\n` +
-                        `${listaSugestoes}\n\n` +
-                        `Responda com os *números* das sugestões (ex: 1,3) ou *não* para pular.`
-                    );
-                }
-            } catch (e) {
-                logger.warn(`[BLOQUEIO] Erro ao buscar sugestões IA: ${e.message}`);
-            }
-
             atualizarUsuario(chaveUsuario, { etapa: "MENU_PRINCIPAL", dados_temporarios: {} });
             return criarTexto(`*Bloqueios adicionados:* ${itens.join(", ")}`);
         }
@@ -1348,10 +1372,8 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
         // -- CONFIRMAÇÃO DE CANCELAMENTO --
         if (usuario.etapa === "CONFIRMAR_CANCELAMENTO") {
             let acao = "INCONCLUSIVO";
-            if (["nao", "não", "n", "cancelar_abortar"].includes(textoNorm)) acao = "NAO";
-            else if (["sim", "s", "ok", "confirmar_cancelamento", "simm"].includes(textoNorm)) acao = "SIM";
-            else if (["outro", "cancelar_outro", "outro dia", "2"].includes(textoNorm)) acao = "OUTRO_DIA";
-            else acao = await assistenteIA.interpretarConfirmacao(texto);
+            if (["outro", "cancelar_outro", "outro dia", "2"].includes(textoNorm)) acao = "OUTRO_DIA";
+            else acao = interpretarConfirmacao(texto);
 
             // Se digitou Não/Cancelar
             if (acao === "NAO") {
@@ -1432,10 +1454,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
             const pedidosParaCancelar = usuario.dados_temporarios?.pedidos ||
                 diasStrs.map(data => ({ data, refeicao: "almoco" }));
             
-            let acao = "INCONCLUSIVO";
-            if (["nao", "não", "n", "nao_cancelar"].includes(textoNorm)) acao = "NAO";
-            else if (["sim", "s", "ok", "cancelar_todos", "simm"].includes(textoNorm)) acao = "SIM";
-            else acao = await assistenteIA.interpretarConfirmacao(texto);
+            let acao = interpretarConfirmacao(texto);
 
             if (acao === "NAO") {
                 atualizarUsuario(chaveUsuario, { etapa: "MENU_PRINCIPAL", dados_temporarios: {} });
@@ -1777,39 +1796,52 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
             return criarTexto("Robô ativado. Ele voltará a pedir suas refeições.");
         }
 
-        // Impede que a IA tente "adivinhar" comandos a partir de palavras soltas ou respostas casuais 
-        // Exemplo: dizer "nao" não deve engatilhar o comando de cancelar almoco.
+        if (
+            textoNorm === "excluir" ||
+            textoNorm === "excluir dados" ||
+            textoNorm === "excluir_dados" ||
+            textoNorm === "apagar dados" ||
+            textoNorm === "apagar meus dados" ||
+            textoNorm === "excluir meus dados" ||
+            textoNorm === "deletar dados" ||
+            textoNorm === "deletar meus dados" ||
+            textoNorm === "excluir conta" ||
+            textoNorm === "apagar conta" ||
+            textoNorm === "deletar conta" ||
+            textoNorm === "remover dados" ||
+            textoNorm === "limpar dados"
+        ) {
+            if (!alunoAtual) {
+                return criarTexto("Você não possui um cadastro ativo no sistema.");
+            }
+            atualizarUsuario(chaveUsuario, {
+                etapa: "CONFIRMAR_EXCLUSAO_DADOS",
+                dados_temporarios: {}
+            });
+            return criarBotoes(
+                "*Exclusão de Dados Pessoais (LGPD)*\n\n" +
+                "Esta ação excluirá definitivamente seu cadastro do SaborIF, incluindo:\n" +
+                "• Vínculo do seu telefone e prontuário\n" +
+                "• Preferências de refeição e dias da semana\n" +
+                "• Lista de pratos bloqueados\n" +
+                "• Histórico de pedidos no sistema\n\n" +
+                "Novos pedidos automáticos não serão mais realizados.\n\n" +
+                "Deseja confirmar a exclusão definitiva dos seus dados?",
+                "Confirmar exclusão",
+                [
+                    { id: "confirmar_exclusao_dados", texto: "1. Sim, excluir meus dados" },
+                    { id: "cancelar_exclusao_dados", texto: "2. Cancelar" }
+                ]
+            );
+        }
+
+        // Respostas casuais ou cumprimentos sem comando ativo
         if (!["CONFIRMAR_CANCELAMENTO", "CONFIRMAR_SUGESTOES_BLOQUEIO", "AGUARDANDO_PRONTUARIO", "AGUARDANDO_DIAS"].includes(usuario.etapa) &&
             ["nao", "não", "n", "sim", "s", "ok", "ta", "tá", "joia", "beleza", "blz", "valeu", "obrigado", "obrigada"].includes(textoNorm)) {
             return criarTexto("Certo! Se precisar de alguma coisa, é só enviar o número de um comando do menu principal. 😊");
         }
 
-        // -- Fallback: tenta classificar com IA (so uma vez, evitar loop) --
-        if (!jaUsouIA) {
-            // Monta contexto do usuario para a IA
-            const diasCadastrados = dadosSemana?.diasPreferidos || [];
-            const bloqueiosUsuario = await conectarBanco(c => obterBloqueios(c, alunoAtual.id));
-            const dadosParaIA = {
-                nome: alunoAtual.nome || alunoAtual.prontuario,
-                refeicao: alunoAtual.refeicao || "almoco",
-                diasCadastrados,
-                bloqueios: bloqueiosUsuario,
-                ativo: alunoAtual.ativo,
-                ultimoPedido: dadosSemana?.pedidos?.[0] ? `${dadosSemana.pedidos[0].dia_pedido} - ${dadosSemana.pedidos[0].motivo}` : null
-            };
-
-            const resultadoIA = await assistenteIA.classificarIntencao(texto, telefone, dadosParaIA);
-
-            if (resultadoIA.tipo === "comando" && resultadoIA.valor !== "ajuda" && resultadoIA.valor !== "continuar") {
-                return processarTexto(jid, resultadoIA.valor, false, true);
-            }
-
-            if (resultadoIA.tipo === "resposta" && resultadoIA.valor) {
-                return criarTexto(resultadoIA.valor);
-            }
-        }
-
-        // Se a IA nao conseguiu ou retornou "ajuda", mostra o menu
+        // Se nenhum comando ou fluxo foi reconhecido, exibe o menu principal interativo
         return menuPrincipalInterativo(alunoAtual, pratoAtual, dadosSemana);
     }
 

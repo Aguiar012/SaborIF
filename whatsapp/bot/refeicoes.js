@@ -34,22 +34,40 @@ export function criarMensagemConfirmacaoTroca(valor) {
     return `${avisoJantar}Trocar sua refeição para *${refeicao.titulo}*?\n\nSeus dias escolhidos e pratos bloqueados serão mantidos.`;
 }
 
-export function interpretarConfirmacaoTroca(texto) {
+export function interpretarConfirmacao(texto = "") {
     const normalizado = semAcentos(texto)
         .replace(/[^a-z0-9_]+/g, " ")
         .trim();
 
     if (
-        normalizado === "confirmar_troca_refeicao" ||
-        /^(sim|s|ok)(\s|$)/.test(normalizado)
-    ) return "SIM";
+        [
+            "1", "sim", "s", "si", "ss", "simm", "simmm", "ok", "claro",
+            "com certeza", "pode ser", "confirmo", "confirmar", "positivo",
+            "yes", "y", "confirmar_troca_refeicao", "confirmar_cancelamento",
+            "cancelar_todos", "confirmar_exclusao_dados"
+        ].includes(normalizado) ||
+        /^(sim|s|ok|confirmo)(\s|$)/.test(normalizado)
+    ) {
+        return "SIM";
+    }
 
     if (
-        normalizado === "cancelar_troca_refeicao" ||
-        /^(nao|n)(\s|$)/.test(normalizado)
-    ) return "NAO";
+        [
+            "2", "nao", "não", "n", "nn", "naoo", "nãoo", "nunca",
+            "de jeito nenhum", "cancela", "cancelar", "cancelar_abortar",
+            "nao_cancelar", "cancelar_troca_refeicao", "cancelar_exclusao_dados",
+            "no", "negativo"
+        ].includes(normalizado) ||
+        /^(nao|n|cancela)(\s|$)/.test(normalizado)
+    ) {
+        return "NAO";
+    }
 
     return "INCONCLUSIVO";
+}
+
+export function interpretarConfirmacaoTroca(texto) {
+    return interpretarConfirmacao(texto);
 }
 
 export function analisarComandoCancelamento(texto) {

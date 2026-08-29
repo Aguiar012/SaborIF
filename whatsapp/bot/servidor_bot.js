@@ -65,8 +65,7 @@ let memoria_whatsapp = null;
 const fluxo = criarFluxoConversa({
     diretorioDados: DIRETORIO_DADOS,
     urlBanco: process.env.DATABASE_URL,
-    logger,
-    chaveGemini: process.env.GEMINI_API_KEY || ""
+    logger
 });
 
 let socket = null;
@@ -625,7 +624,27 @@ async function iniciarWhatsApp() {
 }
 
 // --- API ---
-app.post("/send-message", async (req, res) => {
+const CHAVE_API = (process.env.BOT_API_KEY || process.env.APP_KEY || "").trim();
+
+function validarAutenticacao(req, res, next) {
+    if (!CHAVE_API) {
+        return next();
+    }
+
+    const headerAuth = req.headers["authorization"] || "";
+    const tokenBearer = headerAuth.startsWith("Bearer ") ? headerAuth.slice(7).trim() : "";
+    const headerApiKey = req.headers["x-api-key"] || "";
+    const queryKey = req.query?.key || "";
+
+    if (tokenBearer === CHAVE_API || headerApiKey === CHAVE_API || queryKey === CHAVE_API) {
+        return next();
+    }
+
+    logger.warn(`[AUTH] Tentativa de acesso não autorizada a ${req.path} de ${req.ip}`);
+    return res.status(401).json({ error: "Não autorizado: chave de API inválida ou ausente" });
+}
+
+app.post("/send-message", validarAutenticacao, async (req, res) => {
     try {
         const { number, message } = req.body;
         if (!number || !message) return res.status(400).json({ error: "Dados inválidos: number e message obrigatórios" });
