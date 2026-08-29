@@ -852,7 +852,8 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
             "6. Desbloquear Pratos\n" +
             "7. Ativar/Desativar\n" +
             "8. Guia / Ajuda\n" +
-            "9. Trocar Almoço/Jantar";
+            "9. Trocar Almoço/Jantar\n" +
+            "10. Cancelar Cadastro (Excluir Dados)";
 
         return { text: menu };
     }
@@ -991,11 +992,11 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
             return menuPrincipalInterativo(aluno || null, pratoAtual, dadosSemana);
         }
 
-        // -- Atalhos Numericos do Menu (1-9) --
+        // -- Atalhos Numericos do Menu (1-10) --
         const MAPA_NUMEROS = {
             "1": "cancelar", "2": "status", "3": "historico",
             "4": "preferencia", "5": "bloquear", "6": "desbloquear",
-            "7": null, "8": "guia", "9": "refeicao" // 7 e tratado como toggle abaixo
+            "7": null, "8": "guia", "9": "refeicao", "10": "excluir_dados" // 7 e tratado como toggle abaixo
         };
         if (textoNorm === "7" && usuario.etapa === "MENU_PRINCIPAL") {
             // Toggle: se está ativo → desativa, se inativo → ativa
@@ -1643,6 +1644,53 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
             return await processarFluxoCancelamentoDia(dataAlvo, refeicaoCancelamento);
         }
 
+        // Cancelamento de Cadastro / Exclusão Definitiva de Dados (LGPD)
+        if (
+            textoNorm === "10" ||
+            textoNorm === "excluir" ||
+            textoNorm === "excluir dados" ||
+            textoNorm === "excluir_dados" ||
+            textoNorm === "excluir cadastro" ||
+            textoNorm === "cancelar cadastro" ||
+            textoNorm === "cancelar conta" ||
+            textoNorm === "cancelar meu cadastro" ||
+            textoNorm === "apagar dados" ||
+            textoNorm === "apagar meus dados" ||
+            textoNorm === "excluir meus dados" ||
+            textoNorm === "deletar dados" ||
+            textoNorm === "deletar meus dados" ||
+            textoNorm === "deletar cadastro" ||
+            textoNorm === "excluir conta" ||
+            textoNorm === "apagar conta" ||
+            textoNorm === "deletar conta" ||
+            textoNorm === "remover dados" ||
+            textoNorm === "remover cadastro" ||
+            textoNorm === "limpar dados"
+        ) {
+            if (!alunoAtual) {
+                return criarTexto("Você não possui um cadastro ativo no sistema.");
+            }
+            atualizarUsuario(chaveUsuario, {
+                etapa: "CONFIRMAR_EXCLUSAO_DADOS",
+                dados_temporarios: {}
+            });
+            return criarBotoes(
+                "*Cancelamento de Cadastro e Exclusão de Dados (LGPD)*\n\n" +
+                "Esta ação excluirá definitivamente seu cadastro do SaborIF, incluindo:\n" +
+                "• Vínculo do seu telefone e prontuário\n" +
+                "• Preferências de refeição e dias da semana\n" +
+                "• Lista de pratos bloqueados\n" +
+                "• Histórico de pedidos no sistema\n\n" +
+                "Novos pedidos automáticos não serão mais realizados.\n\n" +
+                "Deseja confirmar a exclusão definitiva do seu cadastro e dados?",
+                "Confirmar exclusão",
+                [
+                    { id: "confirmar_exclusao_dados", texto: "1. Sim, excluir meu cadastro" },
+                    { id: "cancelar_exclusao_dados", texto: "2. Não, manter cadastro" }
+                ]
+            );
+        }
+
         if (textoNorm.startsWith("cancelar") || (textoNorm.includes("nao vou") && textoNorm !== 'nao')) {
             const {
                 refeicao: refeicaoMencionada,
@@ -1794,45 +1842,6 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
             await conectarBanco(c => alterarStatusAtivo(c, alunoAtual.id, true));
             atualizarUsuario(chaveUsuario, { etapa: "MENU_PRINCIPAL", dados_temporarios: {} });
             return criarTexto("Robô ativado. Ele voltará a pedir suas refeições.");
-        }
-
-        if (
-            textoNorm === "excluir" ||
-            textoNorm === "excluir dados" ||
-            textoNorm === "excluir_dados" ||
-            textoNorm === "apagar dados" ||
-            textoNorm === "apagar meus dados" ||
-            textoNorm === "excluir meus dados" ||
-            textoNorm === "deletar dados" ||
-            textoNorm === "deletar meus dados" ||
-            textoNorm === "excluir conta" ||
-            textoNorm === "apagar conta" ||
-            textoNorm === "deletar conta" ||
-            textoNorm === "remover dados" ||
-            textoNorm === "limpar dados"
-        ) {
-            if (!alunoAtual) {
-                return criarTexto("Você não possui um cadastro ativo no sistema.");
-            }
-            atualizarUsuario(chaveUsuario, {
-                etapa: "CONFIRMAR_EXCLUSAO_DADOS",
-                dados_temporarios: {}
-            });
-            return criarBotoes(
-                "*Exclusão de Dados Pessoais (LGPD)*\n\n" +
-                "Esta ação excluirá definitivamente seu cadastro do SaborIF, incluindo:\n" +
-                "• Vínculo do seu telefone e prontuário\n" +
-                "• Preferências de refeição e dias da semana\n" +
-                "• Lista de pratos bloqueados\n" +
-                "• Histórico de pedidos no sistema\n\n" +
-                "Novos pedidos automáticos não serão mais realizados.\n\n" +
-                "Deseja confirmar a exclusão definitiva dos seus dados?",
-                "Confirmar exclusão",
-                [
-                    { id: "confirmar_exclusao_dados", texto: "1. Sim, excluir meus dados" },
-                    { id: "cancelar_exclusao_dados", texto: "2. Cancelar" }
-                ]
-            );
         }
 
         // Respostas casuais ou cumprimentos sem comando ativo
