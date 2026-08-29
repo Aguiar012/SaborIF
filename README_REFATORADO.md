@@ -1,6 +1,6 @@
-# 🍽️ IF Food - Bot de Almoço do IFSP Pirituba
+# 🍽️ SaborIF - Bot de Refeições do IFSP Pirituba
 
-Bot que **pede almoço automaticamente** no site do refeitório e permite o aluno **cancelar/gerenciar pelo WhatsApp**.
+Bot que **pede refeições automaticamente** no site SICA e permite o aluno **cancelar/gerenciar pelo WhatsApp**.
 
 ---
 
