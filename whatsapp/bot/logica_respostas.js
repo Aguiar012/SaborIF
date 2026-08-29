@@ -397,6 +397,27 @@ function criarLista(texto, tituloBotao, secoes = []) {
 // -----------------------------------------------------
 
 export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, logger = console }) {
+    // --------- Constantes do Consentimento do Usuário ----------
+    const VERSAO_TERMO_CONSENTIMENTO = "1.0";
+
+    const RESPOSTAS_ACEITE = [
+        "aceito",
+        "li e aceito",
+        "eu aceito",
+        "aceitar",
+        "aceitar e continuar",
+        "concordo",
+        "concordo com os termos",
+    ];
+
+    const RESPOSTAS_RECUSA = [
+        "nao aceito",
+        "não aceito",
+        "nao aceitar",
+        "não aceitar",
+        "recuso",
+        "discordo",
+    ];
     // --------- Armazenamento de Estado ----------
     const ARQUIVO_ESTADO = path.join(diretorioDados, "estado_fluxo_conversa.json");
     let estado = {};
@@ -493,6 +514,31 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
     async function conectarBanco(funcao) {
         const conexao = await pool.connect();
         try { return await funcao(conexao); } finally { conexao.release(); }
+    }
+
+    // Novas funções para verificar e registrar o consentimento do aluno
+    async function possuiConsentimentoAceito(c, identificadorWhatsApp, versaoTermo) {
+        const { rows } = await c.query(
+            `SELECT 1
+            FROM consentimento_uso_bot
+            WHERE identificador_whatsapp = $1
+            AND versao_termo = $2
+            LIMIT 1`,
+            [identificadorWhatsApp, versaoTermo]
+        );
+
+        return rows.length > 0;
+    }
+
+    async function registrarConsentimento(c, identificadorWhatsApp, versaoTermo) {
+        await c.query(
+            `INSERT INTO consentimento_uso_bot
+                (identificador_whatsapp, versao_termo)
+            VALUES ($1, $2)
+            ON CONFLICT (identificador_whatsapp, versao_termo)
+            DO NOTHING`,
+            [identificadorWhatsApp, versaoTermo]
+        );
     }
 
     // --- Queries ---
@@ -882,16 +928,39 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
         );
     }
 
-    const MENSAGEM_BOAS_VINDAS = criarTexto(
-        "*IFSP Pirituba - Assistente de Refeições*\n\n" +
-        "Esse bot pede sua *refeição automaticamente* no sistema do refeitório!\n\n" +
-        "Você só precisa:\n" +
-        "1. Vincular seu prontuário IFSP\n" +
-        "2. Escolher os dias da semana\n" +
-        "3. Se for autorizado pela CAE, trocar de almoço para jantar pela opção 9\n\n" +
-        "Depois disso, o bot cuida do resto. Se não quiser comer algum dia, é só cancelar pelo bot.\n\n" +
-        "Envie *continuar* para começar o cadastro."
+    const MENSAGEM_CONSENTIMENTO = criarTexto(
+        "*Bem-vindo ao SaborIF!*\n\n" +
+
+        "O SaborIF ajuda estudantes do IFSP Pirituba a configurar e " +
+        "gerenciar solicitações de refeições pelo WhatsApp.\n\n" +
+
+        "*Resumo do tratamento dos seus dados:*\n" +
+        "• Usamos seu telefone, prontuário, preferências de refeição, " +
+        "pratos bloqueados e histórico de solicitações.\n" +
+        "• Esses dados permitem identificar seu cadastro, realizar e " +
+        "gerenciar pedidos, aplicar suas preferências e manter o bot seguro.\n" +
+        "• O funcionamento envolve o WhatsApp, o SaborIF, o banco de dados " +
+        "e o sistema de refeições.\n" +
+        "• Seus dados não são enviados para inteligência artificial.\n" +
+        "• Você pode solicitar a exclusão dos dados pelo bot.\n\n" +
+
+        "Leia o termo completo:\n" +
+        "https://docs.google.com/document/d/1H8Oy6aaVWjROQ423fE8dqfxzJnTiql5diJCCz0u2T4U/edit?usp=sharing\n\n" +
+
+        `*Versão do termo: ${VERSAO_TERMO_CONSENTIMENTO}*\n\n` +
+
+        "Para continuar, responda *ACEITO*.\n" +
+        "Se não concordar, responda *NÃO ACEITO*. Você poderá voltar a falar " +
+        "com o bot quando quiser."
     );
+
+function mensagemPedirProntuario() {
+    return criarTexto(
+        "*Consentimento registrado!*\n\n" +
+        "Para iniciar seu cadastro, digite seu *prontuário IFSP* " +
+        "(apenas números)."
+    );
+}
 
     // --- Texto de Dias da Semana ---
 function menuDiasSemana(motivo, refeicao = "almoco") {
@@ -976,6 +1045,92 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
         }
 
         const textoNorm = normalizar(texto);
+
+        // Essa parte do código deve impedir o menu, ajuda, status ou continuar de avançarem antes de ACEITO.
+
+        const consentimentoAceito = aluno
+            ? true
+            : await conectarBanco(c =>
+                possuiConsentimentoAceito(
+                    c,
+                    telefone,
+                    VERSAO_TERMO_CONSENTIMENTO
+                )
+            );
+
+        if (!aluno && !consentimentoAceito) {
+            const podeResponderAoTermo = [
+                "AGUARDANDO_CONSENTIMENTO",
+                "CONSENTIMENTO_RECUSADO",
+            ].includes(usuario.etapa);
+
+            if (podeResponderAoTermo && RESPOSTAS_ACEITE.includes(textoNorm)) {
+                await conectarBanco(c =>
+                    registrarConsentimento(
+                        c,
+                        telefone,
+                        VERSAO_TERMO_CONSENTIMENTO
+                    )
+                );
+
+                atualizarUsuario(chaveUsuario, {
+                    etapa: "AGUARDANDO_PRONTUARIO",
+                    dados_temporarios: {},
+                });
+
+                return mensagemPedirProntuario();
+            }
+
+            if (podeResponderAoTermo && RESPOSTAS_RECUSA.includes(textoNorm)) {
+                atualizarUsuario(chaveUsuario, {
+                    etapa: "CONSENTIMENTO_RECUSADO",
+                    dados_temporarios: {},
+                });
+
+                return criarTexto(
+                    "Sem problemas. Nenhum cadastro foi criado. ✅\n\n" +
+                    "Você pode voltar a falar comigo quando quiser. Para reler o termo, " +
+                    "envie *termos*."
+                );
+            }
+
+            if (usuario.etapa === "CONSENTIMENTO_RECUSADO") {
+                if (["termos", "ver termos", "ler termos"].includes(textoNorm)) {
+                    atualizarUsuario(chaveUsuario, {
+                        etapa: "AGUARDANDO_CONSENTIMENTO",
+                        dados_temporarios: {},
+                    });
+
+                    return MENSAGEM_CONSENTIMENTO;
+                }
+
+                return criarTexto(
+                    "Sem problemas. Você pode voltar quando quiser.\n\n" +
+                    "Para usar o SaborIF, envie *termos* para reler o aviso."
+                );
+            }
+
+            atualizarUsuario(chaveUsuario, {
+                etapa: "AGUARDANDO_CONSENTIMENTO",
+                dados_temporarios: {},
+            });
+
+            return MENSAGEM_CONSENTIMENTO;
+        }
+        if (
+            !aluno &&
+            consentimentoAceito &&
+            ["NOVO", "AGUARDANDO_CONSENTIMENTO", "CONSENTIMENTO_RECUSADO"]
+                .includes(usuario.etapa)
+        ) {
+            atualizarUsuario(chaveUsuario, {
+                etapa: "AGUARDANDO_PRONTUARIO",
+                dados_temporarios: {},
+            });
+
+            return mensagemPedirProntuario();
+        }
+
 
         // CORREÇÃO: Verifica se é usuário novo ANTES de processar comandos globais
         // Isso impede que "oi" abra o menu para quem nunca se cadastrou
@@ -1099,21 +1254,6 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
                     refeicao
                 );
             }
-            
-
-            if (textoNorm.includes("continuar") || textoNorm === "continuar_cadastro") {
-                atualizarUsuario(chaveUsuario, { etapa: "AGUARDANDO_PRONTUARIO", dados_temporarios: {} });
-                return criarTexto("*Cadastro Inicial*\n\nPor favor, digite seu *prontuario IFSP* (apenas números).");
-            }
-
-            if (usuario.etapa === "AGUARDANDO_CONSENTIMENTO") {
-                return criarBotoes("Quando quiser começar, é só escrever abaixo.", null, [{ id: "continuar_cadastro", texto: "Continuar" }]);
-            }
-
-            if (usuario.etapa === "NOVO") {
-                atualizarUsuario(chaveUsuario, { etapa: "AGUARDANDO_CONSENTIMENTO", dados_temporarios: {} });
-                return MENSAGEM_BOAS_VINDAS;
-            }
 
             if (usuario.etapa === "AGUARDANDO_DIAS") {
                 const dias = interpretarListaDias(texto);
@@ -1161,7 +1301,12 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
                     "Se come de tudo, responda *pular*."
                 );
             }
-            return MENSAGEM_BOAS_VINDAS;
+            atualizarUsuario(chaveUsuario, {
+                etapa: "AGUARDANDO_PRONTUARIO",
+                dados_temporarios: {},
+            });
+
+            return mensagemPedirProntuario();
         }
 
         // ================= ALUNO LOGADO =================
