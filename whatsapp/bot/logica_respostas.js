@@ -1166,7 +1166,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
         }
 
         if (textoNorm === "status" || textoNorm === "meu status" || textoNorm === "cadastro") {
-            if (!aluno) return criarTexto(gerarCabecalho(null, null, pratoAtual) + "Seu número ainda *não está vinculado*. Envie: *CONTINUAR*.");
+            if (!aluno) return criarTexto(gerarCabecalho(null, null, pratoAtual) + "Você ainda não concluiu seu cadastro. Informe seu *prontuário IFSP* para continuar.");
 
             const bloqueiosUsuario = await conectarBanco(c => obterBloqueios(c, aluno.id));
 
@@ -1313,7 +1313,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
         const alunoAtual = aluno;
         if (usuario.etapa === "AGUARDANDO_BLOQUEIOS_CADASTRO") {
             const primeiroNome = alunoAtual.nome?.trim().split(/\s+/)[0] || "Aluno";
-            
+
             const respostasParaPular = [
                 "pular",
                 "nao",
