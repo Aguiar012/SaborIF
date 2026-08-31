@@ -1,34 +1,34 @@
 # flyctl launch added from .gitignore
 # Segredos e configuracoes locais
-**\.env
-**\.env.local
+.env
+.env.local
 
 # Dependencias
-**\node_modules
+node_modules/
 
 # Dados do bot (sessao WhatsApp, logs)
-**\dados_bot
+dados_bot/
 
 # Sistema e logs
-**\*.log
-**\*.txt
-**\logs
-**\temp
-**\site_do_qr_code
-**\.DS_Store
-**\Thumbs.db
+*.log
+*.txt
+logs/
+temp/
+site_do_qr_code/
+.DS_Store
+Thumbs.db
 
 # Python
-**\__pycache__
-**\*.pyc
-**\*.pyo
-**\.venv
-**\venv
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
 
 # IDE e ferramentas
-**\.vscode
-**\.idea
-**\.claude
-**\.gemini
-**\SaborIF
+.vscode/
+.idea/
+.claude/
+.gemini/
+SaborIF/
 fly.toml
