@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main # Quando houver push na versão principal
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -19,6 +20,5 @@ jobs:
             cd ~/bot
             git fetch origin main
             git reset --hard origin/main
-            docker compose down
-            docker compose up -d --build
+            docker compose up -d --build --force-recreate
             docker image prune -f
