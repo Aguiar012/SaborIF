@@ -20,5 +20,9 @@ jobs:
             cd ~/bot
             git fetch origin main
             git reset --hard origin/main
-            docker compose up -d --build --force-recreate
+            export DOCKER_BUILDKIT=0
+            export COMPOSE_DOCKER_CLI_BUILD=0
+            docker builder prune -af || true
+            docker compose build
+            docker compose up -d --force-recreate
             docker image prune -f
