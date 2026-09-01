@@ -44,9 +44,11 @@ export function interpretarConfirmacao(texto = "") {
             "1", "sim", "s", "si", "ss", "simm", "simmm", "ok", "claro",
             "com certeza", "pode ser", "confirmo", "confirmar", "positivo",
             "yes", "y", "confirmar_troca_refeicao", "confirmar_cancelamento",
-            "cancelar_todos", "confirmar_exclusao_dados"
+            "cancelar_todos", "confirmar_exclusao_dados",
+            "sim excluir meus dados", "sim excluir meu cadastro",
+            "excluir meus dados", "excluir meu cadastro"
         ].includes(normalizado) ||
-        /^(sim|s|ok|confirmo)(\s|$)/.test(normalizado)
+        /^(1|sim|s|ok|confirmo)(\s|$)/.test(normalizado)
     ) {
         return "SIM";
     }
@@ -56,9 +58,9 @@ export function interpretarConfirmacao(texto = "") {
             "2", "nao", "não", "n", "nn", "naoo", "nãoo", "nunca",
             "de jeito nenhum", "cancela", "cancelar", "cancelar_abortar",
             "nao_cancelar", "cancelar_troca_refeicao", "cancelar_exclusao_dados",
-            "no", "negativo"
+            "no", "negativo", "manter cadastro", "nao manter cadastro"
         ].includes(normalizado) ||
-        /^(nao|n|cancela)(\s|$)/.test(normalizado)
+        /^(2|nao|n|cancela)(\s|$)/.test(normalizado)
     ) {
         return "NAO";
     }

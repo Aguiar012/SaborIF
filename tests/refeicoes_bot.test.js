@@ -63,6 +63,9 @@ test("interpreta variacoes comuns de confirmacao e recusa deterministica", () =>
     assert.equal(interpretarConfirmacao("pode ser"), "SIM");
     assert.equal(interpretarConfirmacao("confirmo"), "SIM");
     assert.equal(interpretarConfirmacao("confirmar_exclusao_dados"), "SIM");
+    assert.equal(interpretarConfirmacao("sim, excluir meus dados"), "SIM");
+    assert.equal(interpretarConfirmacao("sim, excluir meu cadastro"), "SIM");
+    assert.equal(interpretarConfirmacao("1. Sim, excluir meu cadastro"), "SIM");
     assert.equal(interpretarConfirmacao("nao"), "NAO");
     assert.equal(interpretarConfirmacao("NÃO"), "NAO");
     assert.equal(interpretarConfirmacao("2"), "NAO");
@@ -70,6 +73,8 @@ test("interpreta variacoes comuns de confirmacao e recusa deterministica", () =>
     assert.equal(interpretarConfirmacao("cancelar"), "NAO");
     assert.equal(interpretarConfirmacao("cancelar_abortar"), "NAO");
     assert.equal(interpretarConfirmacao("cancelar_exclusao_dados"), "NAO");
+    assert.equal(interpretarConfirmacao("manter cadastro"), "NAO");
+    assert.equal(interpretarConfirmacao("2. Não, manter cadastro"), "NAO");
     assert.equal(interpretarConfirmacao("invalido xyz"), "INCONCLUSIVO");
 });
 

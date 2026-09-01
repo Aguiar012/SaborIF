@@ -766,17 +766,24 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
         await c.query(`UPDATE aluno SET refeicao=$2 WHERE id=$1`, [alunoId, refeicaoNormalizada]);
     }
 
-    async function excluirTodosDadosAluno(c, alunoId) {
-        if (!alunoId || typeof alunoId !== "number") {
+    async function excluirTodosDadosAluno(c, alunoId, identificadorWhatsApp = null) {
+        const idNumerico = Number(alunoId);
+        if (!idNumerico || isNaN(idNumerico)) {
             throw new Error(`ID de aluno inválido para exclusão: ${alunoId}`);
         }
         await c.query("BEGIN");
         try {
-            await c.query(`DELETE FROM contato WHERE aluno_id = $1`, [alunoId]);
-            await c.query(`DELETE FROM preferencia_dia WHERE aluno_id = $1`, [alunoId]);
-            await c.query(`DELETE FROM prato_bloqueado WHERE aluno_id = $1`, [alunoId]);
-            await c.query(`DELETE FROM pedido WHERE aluno_id = $1`, [alunoId]);
-            await c.query(`DELETE FROM aluno WHERE id = $1`, [alunoId]);
+            await c.query(`DELETE FROM contato WHERE aluno_id = $1`, [idNumerico]);
+            await c.query(`DELETE FROM preferencia_dia WHERE aluno_id = $1`, [idNumerico]);
+            await c.query(`DELETE FROM prato_bloqueado WHERE aluno_id = $1`, [idNumerico]);
+            await c.query(`DELETE FROM pedido WHERE aluno_id = $1`, [idNumerico]);
+            await c.query(`DELETE FROM aluno WHERE id = $1`, [idNumerico]);
+            if (identificadorWhatsApp) {
+                await c.query(
+                    `DELETE FROM consentimento_uso_bot WHERE identificador_whatsapp = $1`,
+                    [identificadorWhatsApp]
+                );
+            }
             await c.query("COMMIT");
         } catch (e) {
             await c.query("ROLLBACK");
@@ -1428,13 +1435,13 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
 
             if (acao === "SIM") {
                 if (alunoAtual?.id) {
-                    await conectarBanco(c => excluirTodosDadosAluno(c, alunoAtual.id));
+                    await conectarBanco(c => excluirTodosDadosAluno(c, alunoAtual.id, telefone));
                 }
                 delete estado[chaveUsuario];
                 salvarEstado();
                 return criarTexto(
                     "Seus dados foram excluídos com sucesso do sistema SaborIF.\n\n" +
-                    "Caso queira utilizar o serviço novamente no futuro, basta enviar *continuar* para realizar um novo cadastro."
+                    "Caso queira utilizar o serviço novamente no futuro, basta enviar *termos* para ler o aviso e iniciar um novo cadastro."
                 );
             }
 
@@ -1443,8 +1450,8 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
                 "Deseja realmente excluir todos os seus dados do sistema?",
                 "Confirmar exclusão",
                 [
-                    { id: "confirmar_exclusao_dados", texto: "1. Sim" },
-                    { id: "cancelar_exclusao_dados", texto: "2. Não" }
+                    { id: "confirmar_exclusao_dados", texto: "1. Sim, excluir meu cadastro" },
+                    { id: "cancelar_exclusao_dados", texto: "2. Não, manter cadastro" }
                 ]
             );
         }
