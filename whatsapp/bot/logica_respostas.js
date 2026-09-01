@@ -1443,8 +1443,8 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
                 "Deseja realmente excluir todos os seus dados do sistema?",
                 "Confirmar exclusão",
                 [
-                    { id: "confirmar_exclusao_dados", texto: "1. Sim, excluir meus dados" },
-                    { id: "cancelar_exclusao_dados", texto: "2. Cancelar" }
+                    { id: "confirmar_exclusao_dados", texto: "1. Sim" },
+                    { id: "cancelar_exclusao_dados", texto: "2. Não" }
                 ]
             );
         }
@@ -1991,7 +1991,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
         }
 
         // Respostas casuais ou cumprimentos sem comando ativo
-        if (!["CONFIRMAR_CANCELAMENTO", "CONFIRMAR_SUGESTOES_BLOQUEIO", "AGUARDANDO_PRONTUARIO", "AGUARDANDO_DIAS"].includes(usuario.etapa) &&
+        if (!["CONFIRMAR_CANCELAMENTO", "CONFIRMAR_CANCELAMENTO_DESATIVAR", "CONFIRMAR_SUGESTOES_BLOQUEIO", "CONFIRMAR_EXCLUSAO_DADOS", "CONFIRMAR_TROCA_REFEICAO", "AGUARDANDO_PRONTUARIO", "AGUARDANDO_DIAS"].includes(usuario.etapa) &&
             ["nao", "não", "n", "sim", "s", "ok", "ta", "tá", "joia", "beleza", "blz", "valeu", "obrigado", "obrigada"].includes(textoNorm)) {
             return criarTexto("Certo! Se precisar de alguma coisa, é só enviar o número de um comando do menu principal. 😊");
         }
