@@ -21,6 +21,17 @@ def conexao_simulada(linhas=None):
 
 
 class BancoRefeicoesTests(unittest.TestCase):
+    def test_falha_na_consulta_nao_vira_lista_vazia_ou_cancelamento_ausente(self):
+        with patch.object(banco_dados, 'URL_BANCO_DADOS', 'postgres://teste'), patch.object(banco_dados.psycopg, 'connect', side_effect=RuntimeError('banco indisponivel')):
+            for funcao, argumentos in [
+                (banco_dados.buscar_cancelamento_direto, (1, '2026-10-06')),
+                (banco_dados.buscar_alunos_para_dia, (2,)),
+                (banco_dados.buscar_pratos_bloqueados, ('teste',)),
+            ]:
+                with self.subTest(funcao=funcao.__name__):
+                    with self.assertRaisesRegex(RuntimeError, 'banco indisponivel'):
+                        funcao(*argumentos)
+
     def test_migracao_guarda_refeicao_no_aluno_e_mantem_dias_unicos(self):
         sql = banco_dados.CAMINHO_MIGRACAO_REFEICOES.read_text(encoding="utf-8")
 
