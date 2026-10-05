@@ -11,7 +11,8 @@ apos reiniciar a VM. O codigo bloqueia envios a partir das 13h15 e relata erro.
 1. Publicar o codigo e aguardar o deploy na Oracle.
 2. Executar o workflow manual `Configurar pedidos na Oracle`.
    Ele usa os segredos existentes via SSH e prepara imagem/unidades, sem ativar.
-3. Validar conexao ao banco, SMTP e SICA sem enviar pedidos.
+3. Validar conexao ao banco, SMTP e SICA sem enviar pedidos:
+   `python3 scripts/verificar_pedidos_oracle.py`.
 4. Confirmar que Oracle e GitHub usam a versao com reserva de envio no banco.
 5. Conferir que nao ha execucoes antigas de pedidos em andamento.
 6. Ativar: `sudo systemctl enable --now saborif-pedidos@almoco.timer saborif-pedidos@jantar.timer`.
