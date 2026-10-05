@@ -20,6 +20,9 @@ from sistema_pedido.banco_dados import (
 from sistema_pedido.servicos.email import enviar_email
 from sistema_pedido.servicos.whatsapp import notificar_administradores, enviar_mensagem_aluno
 
+class PrazoPerdido(RuntimeError):
+    """Prazo encerrado: avisar somente pelo e-mail do relatório."""
+
 def principal():
     """Função principal que gerencia todo o processo de pedidos."""
     validar_configuracao()
@@ -51,7 +54,7 @@ def principal():
                     f'Execução iniciada em {agora:%d/%m/%Y %H:%M}. '
                     'Nenhum pedido enviado; o dia-alvo não foi alterado.')
         enviar_email(f'ALERTA: prazo perdido - {titulo_refeicao}', mensagem)
-        raise RuntimeError(mensagem)
+        raise PrazoPerdido(mensagem)
     if not SIMULAR_PEDIDO:
         garantir_estrutura_refeicoes()
     dia_semana_iso = data_pedido.isoweekday()
@@ -212,7 +215,7 @@ def principal():
 
     # 9. Envia Alerta no WhatsApp (apenas erros relevantes)
     if any('PRAZO_PERDIDO' in msg for _, _, msg, *_ in detalhes_execucao):
-        raise RuntimeError('Prazo perdido durante a execução. Consulte o relatório.')
+        raise PrazoPerdido('Prazo perdido durante a execução. Consulte o relatório.')
 
     lista_erros = [
         (p, m) for (p, ok, m, *_ ) in detalhes_execucao 
@@ -235,9 +238,13 @@ def principal():
         notificar_administradores('\n'.join(corpo_zap))
         logging.info("📱 Alerta de erros enviado para o WhatsApp.")
 
-if __name__ == '__main__':
+def executar():
     try:
         principal()
+    except PrazoPerdido as e:
+        logging.error(str(e))
+        # Código específico também evita o alerta genérico do GitHub no WhatsApp.
+        raise SystemExit(78) from e
     except Exception as e:
         logging.error(f"💀 ERRO FATAL: {e}")
         # Tenta notificar admins por WhatsApp antes de morrer
@@ -255,3 +262,6 @@ if __name__ == '__main__':
         except Exception:
             logging.error("Não conseguiu enviar alerta de erro fatal por WhatsApp.")
         raise  # Re-lança o erro para o GitHub Actions registrar o exit code 1
+
+if __name__ == '__main__':
+    executar()
