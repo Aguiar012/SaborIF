@@ -9,6 +9,19 @@ permissions:
 jobs:
   testes:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: teste-local
+          POSTGRES_DB: saborif_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:teste-local@localhost:5432/saborif_test
     steps:
       - uses: actions/checkout@v7
 

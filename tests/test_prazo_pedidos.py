@@ -39,13 +39,13 @@ class PrazoTests(unittest.TestCase):
         with ExitStack() as stack:
             mocks = {}
             retornos = {
-                'validar_configuracao': None, 'garantir_estrutura_refeicoes': None,
+                'validar_configuracao': None, 'garantir_estrutura_refeicoes': None, 'preparar_reservas': None,
                 'buscar_cardapio_site': 'arroz',
                 'buscar_alunos_para_dia': [{'id': 1, 'prontuario': 'teste'}],
                 'buscar_cancelamento_direto': False, 'pedido_ja_realizado': confirmado,
                 'buscar_pratos_bloqueados': [], 'registrar_historico_pedido': None,
                 'enviar_email': None, 'notificar_administradores': None,
-                'realizar_pedido': (True, 'Ticket gerado'),
+                'realizar_pedido_seguro': (True, 'Ticket gerado'),
             }
             for nome, retorno in retornos.items():
                 mocks[nome] = stack.enter_context(patch.object(app, nome, return_value=retorno))
@@ -58,7 +58,7 @@ class PrazoTests(unittest.TestCase):
                 self.assertIn('PRAZO_PERDIDO', mocks['registrar_historico_pedido'].call_args.args[2])
             else:
                 app.principal()
-            self.assertEqual(mocks['realizar_pedido'].call_count, enviar)
+            self.assertEqual(mocks['realizar_pedido_seguro'].call_count, enviar)
 
     def test_segunda_tentativa_nao_reenvia_sucesso(self):
         self.executar_cenario(confirmado=True, limite=False, enviar=0)

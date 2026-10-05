@@ -38,8 +38,7 @@ permissions:
 
 jobs:
   pedidos:
-    # Na Oracle, manter o GitHub apenas para simulacoes manuais.
-    if: vars.PEDIDOS_NA_ORACLE != 'true' || (github.event_name == 'workflow_dispatch' && inputs.simular_pedido)
+    # Reserva no PostgreSQL protege execucoes simultaneas com a Oracle.
     name: Pedidos - ${{ matrix.refeicao }}
     runs-on: ubuntu-latest
     strategy:

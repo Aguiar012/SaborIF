@@ -19,6 +19,7 @@ from sistema_pedido.banco_dados import (
 )
 from sistema_pedido.servicos.email import enviar_email
 from sistema_pedido.servicos.whatsapp import notificar_administradores, enviar_mensagem_aluno
+from sistema_pedido.envio_seguro import preparar_reservas, realizar_pedido_seguro
 
 class PrazoPerdido(RuntimeError):
     """Prazo encerrado: avisar somente pelo e-mail do relatório."""
@@ -57,6 +58,7 @@ def principal():
         raise PrazoPerdido(mensagem)
     if not SIMULAR_PEDIDO:
         garantir_estrutura_refeicoes()
+        preparar_reservas()
     dia_semana_iso = data_pedido.isoweekday()
     nome_dia_semana = DIAS_SEMANA_PT.get(dia_semana_iso, 'dia-desconhecido')
 
@@ -167,9 +169,11 @@ def principal():
                 break
             logging.info(f"🔄 Tentativa {tentativa} para {prontuario}...")
             try:
-                sucesso_pedido, mensagem_resultado = realizar_pedido(
-                    sessao, prontuario, REFEICAO_ATUAL
+                sucesso_pedido, mensagem_resultado = realizar_pedido_seguro(
+                    sessao, id_aluno, prontuario, data_pedido, REFEICAO_ATUAL, agora.date()
                 )
+                if mensagem_resultado.startswith(('ENVIO_INCERTO:', 'ENVIO_RESERVADO:', 'PRAZO_PERDIDO:')):
+                    break
                 if sucesso_pedido:
                     logging.info(f"✅ Sucesso para {prontuario}: {mensagem_resultado}")
                     break
@@ -190,9 +194,10 @@ def principal():
         else:
             motivo_log = f'ERRO_PEDIDO: {mensagem_resultado}'
         
-        registrar_historico_pedido(
-            id_aluno, data_pedido, motivo_log, REFEICAO_ATUAL
-        )
+        if not sucesso_pedido:
+            registrar_historico_pedido(
+                id_aluno, data_pedido, motivo_log, REFEICAO_ATUAL
+            )
 
     # 8. Gera Relatório por E-mail
     prefixo_teste = '[TESTE] ' if MODO_TESTE else ''
@@ -219,7 +224,7 @@ def principal():
 
     lista_erros = [
         (p, m) for (p, ok, m, *_ ) in detalhes_execucao 
-        if (not ok) and validar_erro_relevante(m)
+        if (not ok) and not m.startswith(('ENVIO_INCERTO:', 'ENVIO_RESERVADO:')) and validar_erro_relevante(m)
     ]
     
     if lista_erros:
