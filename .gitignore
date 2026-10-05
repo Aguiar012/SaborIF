@@ -1,6 +1,5 @@
 # Segredos e configuracoes locais
-.env
-.env.local
+.env*
 
 # Dependencias
 node_modules/

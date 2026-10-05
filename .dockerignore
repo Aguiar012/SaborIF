@@ -1,7 +1,6 @@
 # flyctl launch added from .gitignore
 # Segredos e configuracoes locais
-.env
-.env.local
+.env*
 
 # Dependencias
 node_modules/
