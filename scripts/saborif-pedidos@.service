@@ -1,0 +1,13 @@
+[Unit]
+Description=Pedidos SaborIF %i
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/bot
+ExecStart=/usr/bin/python3 /home/ubuntu/bot/scripts/executar_pedidos_oracle.py %i
+TimeoutStartSec=3h
+ExecStopPost=-/usr/bin/docker stop saborif-pedidos-%i

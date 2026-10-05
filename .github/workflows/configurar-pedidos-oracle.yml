@@ -1,0 +1,35 @@
+name: Configurar pedidos na Oracle
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  configurar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          TO_ADDRESS: ${{ secrets.TO_ADDRESS }}
+          BOT_URL: ${{ secrets.BOT_URL }}
+          BOT_API_KEY: ${{ secrets.BOT_API_KEY || secrets.APP_KEY }}
+          ADMINS_E164: ${{ secrets.ADMINS_E164 }}
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ${{ secrets.ORACLE_USER }}
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          envs: DATABASE_URL,EMAIL_USER,EMAIL_PASS,SMTP_SERVER,SMTP_PORT,TO_ADDRESS,BOT_URL,BOT_API_KEY,ADMINS_E164
+          command_timeout: 15m
+          script: |
+            set -eu
+            cd ~/bot
+            python3 scripts/configurar_pedidos_oracle.py
+            docker build -f Dockerfile.pedidos -t saborif-pedidos:local .
+            sudo cp scripts/saborif-pedidos@.service scripts/saborif-pedidos@.timer /etc/systemd/system/
+            sudo systemctl daemon-reload
+            # Preparar apenas. Ativar os timers depois de desativar o GitHub.
+            systemd-analyze verify /etc/systemd/system/saborif-pedidos@.service /etc/systemd/system/saborif-pedidos@.timer
