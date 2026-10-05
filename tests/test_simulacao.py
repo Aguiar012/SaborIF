@@ -38,7 +38,7 @@ class SimulacaoTests(unittest.TestCase):
             iniciar_pedidos.principal()
 
         validar.assert_called_once()
-        garantir_estrutura.assert_called_once()
+        garantir_estrutura.assert_not_called()
         buscar_alunos.assert_called_once_with(1, JANTAR, "pt0000000")
         buscar_cardapio.assert_not_called()
         realizar_pedido.assert_not_called()

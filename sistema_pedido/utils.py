@@ -7,23 +7,28 @@ DIAS_SEMANA_PT = {1: 'seg', 2: 'ter', 3: 'qua', 4: 'qui', 5: 'sex', 6: 'sab', 7:
 def data_alvo_pedido(agora: datetime | None = None):
     """
     Calcula para qual dia o pedido deve ser feito.
-    Se for antes das 13:15, tenta pedir para amanhã (1 dia depois).
-    Se for depois, tenta pedir para depois de amanhã (2 dias depois).
+    As duas tentativas mantêm o próximo dia útil como alvo.
+    O prazo é validado separadamente; atraso nunca muda o alvo.
     Pula fins de semana.
     """
     if agora is None:
         agora = datetime.now(FUSO_HORARIO)
         
-    horario_corte = agora.replace(hour=HORA_CORTE, minute=MINUTO_CORTE, second=0, microsecond=0)
-    
-    dias_para_frente = 1 if agora < horario_corte else 2
-    data_alvo = (agora + timedelta(days=dias_para_frente)).date()
+    agora = agora.astimezone(FUSO_HORARIO)
+    data_alvo = (agora + timedelta(days=1)).date()
     
     # Se cair sábado (6) ou domingo (7), avança para segunda-feira
     while data_alvo.isoweekday() in (6, 7):
         data_alvo += timedelta(days=1)
         
     return data_alvo
+
+
+def prazo_encerrado(agora=None, data_execucao=None):
+    agora = (agora or datetime.now(FUSO_HORARIO)).astimezone(FUSO_HORARIO)
+    if data_execucao is not None and agora.date() != data_execucao:
+        return True
+    return (agora.hour, agora.minute) >= (HORA_CORTE, MINUTO_CORTE)
 
 def normalizar_texto(texto: str) -> str:
     """Remove acentos e converte para minúsculas para comparação fácil."""

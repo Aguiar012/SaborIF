@@ -55,6 +55,19 @@ def buscar_cancelamento_direto(aluno_id: int, data_pedido, refeicao='almoco') ->
         logging.error(f"Erro ao buscar cancelamento direto: {e}")
         return False
 
+def pedido_ja_realizado(aluno_id, data_pedido, refeicao='almoco'):
+    """Falha de consulta interrompe a execução para não duplicar pedidos."""
+    with psycopg.connect(URL_BANCO_DADOS, connect_timeout=15) as conexao:
+        with conexao.cursor() as cursor:
+            cursor.execute("""
+                SELECT 1 FROM pedido
+                 WHERE aluno_id = %s AND dia_pedido = %s AND refeicao = %s
+                   AND motivo LIKE 'PEDIU_OK:%%'
+                 LIMIT 1
+            """, (aluno_id, data_pedido, obter_refeicao(refeicao).nome))
+            return cursor.fetchone() is not None
+
+
 def buscar_alunos_para_dia(
     dia_da_semana: int, refeicao='almoco', prontuario: str | None = None
 ) -> list[dict]:

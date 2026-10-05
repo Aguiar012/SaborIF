@@ -17,6 +17,7 @@ jobs:
           username: ${{ secrets.ORACLE_USER }}
           key: ${{ secrets.ORACLE_SSH_KEY }}
           script: |
+            set -eu
             cd ~/bot
             git fetch origin main
             git reset --hard origin/main
@@ -26,3 +27,6 @@ jobs:
             docker compose build
             docker compose up -d --force-recreate
             docker image prune -f
+            if [ -f "$HOME/.config/saborif/pedidos.json" ]; then
+              docker build -f Dockerfile.pedidos -t saborif-pedidos:local .
+            fi

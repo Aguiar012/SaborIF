@@ -8,14 +8,14 @@ from sistema_pedido.configuracao import (
     MODO_TESTE, PRONTUARIO_TESTE, REFEICAO_ATUAL, SIMULAR_PEDIDO,
     validar_configuracao
 )
-from sistema_pedido.utils import data_alvo_pedido, verificar_bloqueios, DIAS_SEMANA_PT
+from sistema_pedido.utils import data_alvo_pedido, prazo_encerrado, verificar_bloqueios, DIAS_SEMANA_PT
 from sistema_pedido.cliente_site import (
     buscar_cardapio_site, realizar_pedido, validar_erro_relevante
 )
 from sistema_pedido.banco_dados import (
     buscar_alunos_para_dia, buscar_pratos_bloqueados,
     registrar_historico_pedido, buscar_cancelamento_direto,
-    buscar_telefone_aluno, garantir_estrutura_refeicoes
+    buscar_telefone_aluno, garantir_estrutura_refeicoes, pedido_ja_realizado
 )
 from sistema_pedido.servicos.email import enviar_email
 from sistema_pedido.servicos.whatsapp import notificar_administradores, enviar_mensagem_aluno
@@ -23,11 +23,13 @@ from sistema_pedido.servicos.whatsapp import notificar_administradores, enviar_m
 def principal():
     """Função principal que gerencia todo o processo de pedidos."""
     validar_configuracao()
-    garantir_estrutura_refeicoes()
     agora = datetime.now(FUSO_HORARIO)
     nome_refeicao = REFEICAO_ATUAL.nome
     titulo_refeicao = REFEICAO_ATUAL.titulo
     atraso_maximo = 0 if MODO_TESTE else ATRASO_MAXIMO
+    if agora.hour >= 13:
+        # A tentativa de seguranca tem apenas 15 minutos de janela.
+        atraso_maximo = min(atraso_maximo, 5)
 
     if MODO_TESTE:
         logging.warning(
@@ -44,6 +46,14 @@ def principal():
 
     # 1. Calcula para qual data vamos fazer os pedidos
     data_pedido = data_alvo_pedido(agora)
+    if not SIMULAR_PEDIDO and prazo_encerrado(agora):
+        mensagem = (f'Prazo perdido para {data_pedido:%d/%m/%Y}. '
+                    f'Execução iniciada em {agora:%d/%m/%Y %H:%M}. '
+                    'Nenhum pedido enviado; o dia-alvo não foi alterado.')
+        enviar_email(f'ALERTA: prazo perdido - {titulo_refeicao}', mensagem)
+        raise RuntimeError(mensagem)
+    if not SIMULAR_PEDIDO:
+        garantir_estrutura_refeicoes()
     dia_semana_iso = data_pedido.isoweekday()
     nome_dia_semana = DIAS_SEMANA_PT.get(dia_semana_iso, 'dia-desconhecido')
 
@@ -107,6 +117,10 @@ def principal():
             continue
         
         # 5. Verifica restrições alimentares (bloqueios)
+        if pedido_ja_realizado(id_aluno, data_pedido, REFEICAO_ATUAL):
+            detalhes_execucao.append((prontuario, True, 'Confirmado na tentativa anterior; sem reenvio.', '-', '-', 0))
+            continue
+
         lista_bloqueios = buscar_pratos_bloqueados(prontuario)
         deve_pular, motivo_bloqueio = verificar_bloqueios(texto_prato_dia, lista_bloqueios)
         
@@ -145,6 +159,9 @@ def principal():
         tentativa = 0
         
         for tentativa in range(1, TENTATIVAS_PEDIDO + 1):
+            if prazo_encerrado(datetime.now(FUSO_HORARIO), agora.date()):
+                mensagem_resultado = 'PRAZO_PERDIDO: limite de 13h15 atingido; pedido não enviado.'
+                break
             logging.info(f"🔄 Tentativa {tentativa} para {prontuario}...")
             try:
                 sucesso_pedido, mensagem_resultado = realizar_pedido(
@@ -194,6 +211,9 @@ def principal():
     )
 
     # 9. Envia Alerta no WhatsApp (apenas erros relevantes)
+    if any('PRAZO_PERDIDO' in msg for _, _, msg, *_ in detalhes_execucao):
+        raise RuntimeError('Prazo perdido durante a execução. Consulte o relatório.')
+
     lista_erros = [
         (p, m) for (p, ok, m, *_ ) in detalhes_execucao 
         if (not ok) and validar_erro_relevante(m)

@@ -326,7 +326,12 @@ function gerarCabecalho(aluno, pratoAtual, dadosSemana = null) {
                 }
             } else {
                 if (estaRegistrado) {
-                    diasVou.push(nomeDia);
+                    const limitePedido = new Date(dataDodia);
+                    limitePedido.setDate(limitePedido.getDate() - 1);
+                    while ([0, 6].includes(limitePedido.getDay())) limitePedido.setDate(limitePedido.getDate() - 1);
+                    limitePedido.setHours(13, 15, 0, 0);
+                    if (agora >= limitePedido) diasErro.push(nomeDia);
+                    else diasVou.push(nomeDia);
                 } else {
                     diasNaoVou.push(nomeDia);
                 }
@@ -336,9 +341,9 @@ function gerarCabecalho(aluno, pratoAtual, dadosSemana = null) {
         tabelaSemana += "\n*Resumo da Semana:*\n";
 
         if (diasPediu.length) tabelaSemana += `✅ *Já Pedi:* ${diasPediu.join(", ")}\n`;
-        if (diasVou.length) tabelaSemana += `📅 *Vai Pedir:* ${diasVou.join(", ")}\n`;
+        if (diasVou.length) tabelaSemana += `📅 *Programado:* ${diasVou.join(", ")}\n`;
         if (diasNaoVou.length) tabelaSemana += `❌ *Não Vai:* ${diasNaoVou.join(", ")}\n`;
-        if (diasErro.length) tabelaSemana += `⚠️ *Sem Dados:* ${diasErro.join(", ")}\n`;
+        if (diasErro.length) tabelaSemana += `⚠️ *Sem confirmação (verifique no SICA):* ${diasErro.join(", ")}\n`;
 
         tabelaSemana += "\n";
     }
