@@ -19,6 +19,12 @@ class EnvioTests(unittest.TestCase):
             self.assertIn('ENVIO_RESERVADO', self.enviar()[1])
             post.assert_not_called()
 
+    def test_banco_indisponivel_nao_envia(self):
+        with patch.object(seguro, 'reservar', side_effect=psycopg.OperationalError()), patch.object(seguro, 'realizar_pedido') as post:
+            with self.assertRaises(psycopg.OperationalError):
+                self.enviar()
+            post.assert_not_called()
+
     def test_resposta_incerta_preserva_reserva(self):
         with patch.object(seguro, 'reservar', return_value=True), patch.object(seguro, 'realizar_pedido', side_effect=site.PedidoIncerto()), patch.object(seguro, 'concluir') as concluir:
             self.assertIn('ENVIO_INCERTO', self.enviar()[1])
@@ -89,6 +95,21 @@ class ConcorrenciaPostgresTests(unittest.TestCase):
         self.assertFalse(seguro.reservar(1, date(2026, 10, 6), 'almoco'))
         seguro.concluir(1, date(2026, 10, 6), 'almoco', 'incerto')
         self.assertFalse(seguro.reservar(1, date(2026, 10, 6), 'almoco'))
+
+    def test_erro_no_historico_reverte_confirmacao_sem_liberar(self):
+        dia = date(2026, 10, 6)
+        self.assertTrue(seguro.reservar(1, dia, 'almoco'))
+        with psycopg.connect(self.url) as conn:
+            conn.execute("ALTER TABLE pedido ADD CONSTRAINT falha_teste CHECK (aluno_id <> 1)")
+        try:
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                seguro.concluir(1, dia, 'almoco', 'confirmado', 'Ticket gerado')
+            with psycopg.connect(self.url) as conn:
+                self.assertEqual(conn.execute('SELECT estado FROM envio_pedido').fetchone()[0], 'enviando')
+            self.assertFalse(seguro.reservar(1, dia, 'almoco'))
+        finally:
+            with psycopg.connect(self.url) as conn:
+                conn.execute('ALTER TABLE pedido DROP CONSTRAINT falha_teste')
 
     def test_falha_segura_permite_nova_tentativa(self):
         self.assertTrue(seguro.reservar(1, date(2026, 10, 6), 'almoco'))
