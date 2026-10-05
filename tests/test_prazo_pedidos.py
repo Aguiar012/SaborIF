@@ -34,37 +34,44 @@ class PrazoTests(unittest.TestCase):
             migrar.assert_not_called()
             sica.assert_not_called()
 
-    def executar_cenario(self, confirmado, limite, enviar):
+    def executar_cenario(self, limite, enviar, resposta=None, execucoes=1):
         from contextlib import ExitStack
         with ExitStack() as stack:
             mocks = {}
             retornos = {
-                'validar_configuracao': None, 'garantir_estrutura_refeicoes': None, 'preparar_reservas': None,
+                'validar_configuracao': None, 'garantir_estrutura_refeicoes': None,
                 'buscar_cardapio_site': 'arroz',
                 'buscar_alunos_para_dia': [{'id': 1, 'prontuario': 'teste'}],
-                'buscar_cancelamento_direto': False, 'pedido_ja_realizado': confirmado,
+                'buscar_cancelamento_direto': False,
                 'buscar_pratos_bloqueados': [], 'registrar_historico_pedido': None,
                 'enviar_email': None, 'notificar_administradores': None,
-                'realizar_pedido_seguro': (True, 'Ticket gerado'),
+                'realizar_pedido': resposta or (True, 'Ticket gerado'),
             }
             for nome, retorno in retornos.items():
                 mocks[nome] = stack.enter_context(patch.object(app, nome, return_value=retorno))
             stack.enter_context(patch.object(app, 'SIMULAR_PEDIDO', False))
             stack.enter_context(patch.object(app.time, 'sleep'))
-            stack.enter_context(patch.object(app, 'prazo_encerrado', side_effect=[False, limite]))
-            if limite and not confirmado:
+            stack.enter_context(patch.object(app, 'prazo_encerrado', side_effect=[False, limite] * execucoes))
+            if limite:
                 with self.assertRaisesRegex(RuntimeError, 'Prazo perdido durante'):
                     app.principal()
                 self.assertIn('PRAZO_PERDIDO', mocks['registrar_historico_pedido'].call_args.args[2])
             else:
-                app.principal()
-            self.assertEqual(mocks['realizar_pedido_seguro'].call_count, enviar)
+                for _ in range(execucoes):
+                    app.principal()
+            self.assertEqual(mocks['realizar_pedido'].call_count, enviar)
+            if resposta and resposta[0]:
+                self.assertIn('PEDIU_OK:', mocks['registrar_historico_pedido'].call_args.args[2])
+                mocks['notificar_administradores'].assert_not_called()
 
-    def test_segunda_tentativa_nao_reenvia_sucesso(self):
-        self.executar_cenario(confirmado=True, limite=False, enviar=0)
+    def test_segunda_execucao_reenvia_para_sica_validar(self):
+        self.executar_cenario(limite=False, enviar=2, execucoes=2)
+
+    def test_ja_pedido_e_registrado_como_sucesso_sem_alerta(self):
+        self.executar_cenario(limite=False, enviar=1, resposta=(True, 'Gerado anteriormente'))
 
     def test_prazo_vence_durante_pausa_e_impede_post(self):
-        self.executar_cenario(confirmado=False, limite=True, enviar=0)
+        self.executar_cenario(limite=True, enviar=0)
 
     def test_pendente_antes_do_prazo_e_enviado(self):
-        self.executar_cenario(confirmado=False, limite=False, enviar=1)
+        self.executar_cenario(limite=False, enviar=1)

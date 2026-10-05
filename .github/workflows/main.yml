@@ -38,7 +38,7 @@ permissions:
 
 jobs:
   pedidos:
-    # Reserva no PostgreSQL protege execucoes simultaneas com a Oracle.
+    # Oracle e GitHub podem repetir tentativas; o SICA valida a duplicidade.
     name: Pedidos - ${{ matrix.refeicao }}
     runs-on: ubuntu-latest
     strategy:
