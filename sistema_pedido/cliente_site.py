@@ -180,7 +180,11 @@ def buscar_cardapio_site(sessao, data_pedido=None):
         logging.error(f"Erro ao ler cardápio do site: {e}")
         return "(erro na atualização)"
 
-def realizar_pedido(sessao, prontuario: str, refeicao='almoco'):
+class PedidoIncerto(RuntimeError):
+    """O POST pode ter sido aceito; repetir automaticamente não é seguro."""
+
+
+def realizar_pedido(sessao, prontuario: str, refeicao='almoco', antes_de_enviar=None):
     """Envia o pedido de almoco ou jantar para o SICA."""
     try:
         refeicao = obter_refeicao(refeicao)
@@ -192,8 +196,17 @@ def realizar_pedido(sessao, prontuario: str, refeicao='almoco'):
         }
         cabecalhos = {'Referer': URL_PRINCIPAL}
         
-        resposta = sessao.post(URL_PRINCIPAL, data=dados, headers=cabecalhos, timeout=TEMPO_TIMEOUT)
-        return interpretar_resposta_pedido(resposta.text)
-        
+        if antes_de_enviar:
+            antes_de_enviar()
     except Exception as e:
         return False, str(e)
+
+    try:
+        resposta = sessao.post(URL_PRINCIPAL, data=dados, headers=cabecalhos, timeout=TEMPO_TIMEOUT)
+        resposta.raise_for_status()
+        ok, mensagem = interpretar_resposta_pedido(resposta.text)
+        if not ok and mensagem == 'Não encontrei mensagem de confirmação no site.':
+            raise PedidoIncerto(mensagem)
+        return ok, mensagem
+    except Exception as e:
+        raise PedidoIncerto('Resultado do envio não confirmado.') from e
