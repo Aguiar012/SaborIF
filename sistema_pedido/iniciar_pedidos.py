@@ -10,7 +10,7 @@ from sistema_pedido.configuracao import (
 )
 from sistema_pedido.utils import data_alvo_pedido, prazo_encerrado, verificar_bloqueios, DIAS_SEMANA_PT
 from sistema_pedido.cliente_site import (
-    buscar_cardapio_site, realizar_pedido, validar_erro_relevante
+    buscar_cardapio_site, validar_erro_relevante
 )
 from sistema_pedido.banco_dados import (
     buscar_alunos_para_dia, buscar_pratos_bloqueados,

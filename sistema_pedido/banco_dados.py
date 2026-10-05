@@ -34,7 +34,7 @@ def buscar_cancelamento_direto(aluno_id: int, data_pedido, refeicao='almoco') ->
     Retorna True se o aluno já cancelou (e portanto não devemos pedir).
     """
     if not URL_BANCO_DADOS:
-        return False
+        raise RuntimeError('Banco não configurado; não é seguro consultar cancelamentos.')
         
     refeicao = obter_refeicao(refeicao)
 
@@ -53,7 +53,7 @@ def buscar_cancelamento_direto(aluno_id: int, data_pedido, refeicao='almoco') ->
                 return resultado is not None
     except Exception as e:
         logging.error(f"Erro ao buscar cancelamento direto: {e}")
-        return False
+        raise
 
 def pedido_ja_realizado(aluno_id, data_pedido, refeicao='almoco'):
     """Falha de consulta interrompe a execução para não duplicar pedidos."""
@@ -82,7 +82,7 @@ def buscar_alunos_para_dia(
     """
     if not URL_BANCO_DADOS:
         logging.error("❌ URL do banco não configurada!")
-        return []
+        raise RuntimeError('Banco não configurado; lista de alunos desconhecida.')
 
     refeicao = obter_refeicao(refeicao)
     alunos = []
@@ -119,7 +119,7 @@ def buscar_alunos_para_dia(
         return alunos
     except Exception as e:
         logging.error(f"❌ Erro no banco ao buscar alunos: {e}")
-        return []
+        raise
 
 def buscar_telefone_aluno(aluno_id: int) -> str | None:
     """
@@ -147,7 +147,7 @@ def buscar_telefone_aluno(aluno_id: int) -> str | None:
 def buscar_pratos_bloqueados(prontuario: str) -> list[str]:
     """Retorna lista de nomes de pratos que o aluno bloqueou."""
     if not URL_BANCO_DADOS:
-        return []
+        raise RuntimeError('Banco não configurado; bloqueios desconhecidos.')
 
     try:
         with psycopg.connect(URL_BANCO_DADOS) as conexao:
@@ -163,7 +163,7 @@ def buscar_pratos_bloqueados(prontuario: str) -> list[str]:
                 return [linha[0] for linha in cursor.fetchall()]
     except Exception as e:
         logging.error(f"Erro ao buscar bloqueios do prontuário {prontuario}: {e}")
-        return []
+        raise
 
 def registrar_historico_pedido(
     aluno_id: int, data_pedido, motivo: str, refeicao='almoco'
