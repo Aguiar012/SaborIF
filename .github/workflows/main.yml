@@ -69,6 +69,7 @@ jobs:
           echo "Simulacao sem pedido: $SIMULAR_PEDIDO"
 
       - name: Executar pedidos
+        id: pedidos
         env:
           EMAIL_USER:  ${{ secrets.EMAIL_USER }}
           EMAIL_PASS:  ${{ secrets.EMAIL_PASS }}
@@ -82,10 +83,17 @@ jobs:
           ADMINS_E164: ${{ secrets.ADMINS_E164 }}
 
           DATABASE_URL: ${{ secrets.DATABASE_URL }} 
-        run: python -m sistema_pedido.iniciar_pedidos
+        run: |
+          set +e
+          python -m sistema_pedido.iniciar_pedidos
+          resultado=$?
+          if [ "$resultado" -eq 78 ]; then
+            echo "prazo_perdido=true" >> "$GITHUB_OUTPUT"
+          fi
+          exit "$resultado"
 
       - name: Notify admins on failure (Bot Próprio)
-        if: failure()
+        if: failure() && steps.pedidos.outputs.prazo_perdido != 'true'
         env:
           BOT_URL:     ${{ secrets.BOT_URL }}
           BOT_API_KEY: ${{ secrets.BOT_API_KEY || secrets.APP_KEY }}

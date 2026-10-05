@@ -8,6 +8,14 @@ from sistema_pedido import iniciar_pedidos as app
 SP = ZoneInfo('America/Sao_Paulo')
 
 class PrazoTests(unittest.TestCase):
+    def test_prazo_perdido_nao_dispara_whatsapp_fatal(self):
+        with patch.object(app, 'principal', side_effect=app.PrazoPerdido('Prazo perdido')), patch.object(app, 'notificar_administradores') as admins, patch.object(app, 'enviar_mensagem_aluno') as aluno:
+            with self.assertRaises(SystemExit) as resultado:
+                app.executar()
+            self.assertEqual(resultado.exception.code, 78)
+            admins.assert_not_called()
+            aluno.assert_not_called()
+
     def test_atraso_nao_muda_terca_para_quarta(self):
         for hora, minuto in [(6, 0), (13, 0), (14, 45)]:
             self.assertEqual(data_alvo_pedido(datetime(2026, 10, 5, hora, minuto, tzinfo=SP)), date(2026, 10, 6))
