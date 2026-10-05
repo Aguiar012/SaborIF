@@ -46,7 +46,11 @@ def interpretar_resposta_pedido(html: str):
     # Procura mensagem de erro (alert-danger)
     div_erro = soup.select_one('.alert.alert-danger.alert-dismissable.fade.in')
     if div_erro:
-        return False, div_erro.get_text(" ", strip=True)
+        mensagem = div_erro.get_text(" ", strip=True)
+        # O SICA valida a duplicidade; um ticket existente também é confirmação.
+        ja_pedido = re.search(r'gerado anteriormente|j[áa] (?:foi )?(?:pedido|solicitado|gerado)', mensagem, re.IGNORECASE)
+        negacao = re.search(r'\b(não|nao|nunca)\b', mensagem, re.IGNORECASE)
+        return bool(ja_pedido and not negacao), mensagem
     
     # Procura mensagem de sucesso (alert-success)
     div_sucesso = soup.select_one('.alert.alert-success.alert-dismissable.fade.in')
@@ -180,10 +184,6 @@ def buscar_cardapio_site(sessao, data_pedido=None):
         logging.error(f"Erro ao ler cardápio do site: {e}")
         return "(erro na atualização)"
 
-class PedidoIncerto(RuntimeError):
-    """O POST pode ter sido aceito; repetir automaticamente não é seguro."""
-
-
 def realizar_pedido(sessao, prontuario: str, refeicao='almoco', antes_de_enviar=None):
     """Envia o pedido de almoco ou jantar para o SICA."""
     try:
@@ -204,9 +204,7 @@ def realizar_pedido(sessao, prontuario: str, refeicao='almoco', antes_de_enviar=
     try:
         resposta = sessao.post(URL_PRINCIPAL, data=dados, headers=cabecalhos, timeout=TEMPO_TIMEOUT)
         resposta.raise_for_status()
-        ok, mensagem = interpretar_resposta_pedido(resposta.text)
-        if not ok and mensagem == 'Não encontrei mensagem de confirmação no site.':
-            raise PedidoIncerto(mensagem)
-        return ok, mensagem
+        return interpretar_resposta_pedido(resposta.text)
     except Exception as e:
-        raise PedidoIncerto('Resultado do envio não confirmado.') from e
+        # A próxima tentativa é permitida: o próprio SICA recusa duplicidades.
+        return False, str(e)

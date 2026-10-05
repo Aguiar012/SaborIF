@@ -21,7 +21,7 @@ try:
     with psycopg.connect(os.environ['DATABASE_URL'], connect_timeout=15) as conn:
         conn.execute('BEGIN READ ONLY')
         assert conn.execute('SELECT 1').fetchone()[0] == 1
-        conn.execute('SELECT estado FROM envio_pedido LIMIT 0')
+        conn.execute('SELECT aluno_id, dia_pedido, refeicao FROM pedido LIMIT 0')
     print('Banco e estrutura: OK', flush=True)
     with smtplib.SMTP(os.environ.get('SMTP_SERVER') or 'smtp.gmail.com',
                       int(os.environ.get('SMTP_PORT') or 587), timeout=20) as smtp:

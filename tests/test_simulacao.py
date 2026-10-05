@@ -9,7 +9,7 @@ from sistema_pedido.refeicoes import JANTAR
 class SimulacaoTests(unittest.TestCase):
     @patch("sistema_pedido.iniciar_pedidos.enviar_email")
     @patch("sistema_pedido.iniciar_pedidos.registrar_historico_pedido")
-    @patch("sistema_pedido.iniciar_pedidos.realizar_pedido_seguro")
+    @patch("sistema_pedido.iniciar_pedidos.realizar_pedido")
     @patch("sistema_pedido.iniciar_pedidos.buscar_cardapio_site")
     @patch("sistema_pedido.iniciar_pedidos.buscar_alunos_para_dia")
     @patch("sistema_pedido.iniciar_pedidos.data_alvo_pedido")
@@ -34,13 +34,11 @@ class SimulacaoTests(unittest.TestCase):
             patch.object(iniciar_pedidos, "PRONTUARIO_TESTE", "pt0000000"),
             patch.object(iniciar_pedidos, "SIMULAR_PEDIDO", True),
             patch.object(iniciar_pedidos, "REFEICAO_ATUAL", JANTAR),
-            patch.object(iniciar_pedidos, "preparar_reservas") as preparar,
         ):
             iniciar_pedidos.principal()
 
         validar.assert_called_once()
         garantir_estrutura.assert_not_called()
-        preparar.assert_not_called()
         buscar_alunos.assert_called_once_with(1, JANTAR, "pt0000000")
         buscar_cardapio.assert_not_called()
         realizar_pedido.assert_not_called()
