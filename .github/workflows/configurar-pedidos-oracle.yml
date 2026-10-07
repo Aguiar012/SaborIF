@@ -31,5 +31,5 @@ jobs:
             docker build -f Dockerfile.pedidos -t saborif-pedidos:local .
             sudo cp scripts/saborif-pedidos@.service scripts/saborif-pedidos@.timer /etc/systemd/system/
             sudo systemctl daemon-reload
-            # Preparar apenas. Ativar os timers depois de desativar o GitHub.
+            # Preparar apenas. Validar antes de ativar; GitHub fica como reserva.
             systemd-analyze verify /etc/systemd/system/saborif-pedidos@.service /etc/systemd/system/saborif-pedidos@.timer

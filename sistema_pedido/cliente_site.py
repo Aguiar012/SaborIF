@@ -47,10 +47,15 @@ def interpretar_resposta_pedido(html: str):
     div_erro = soup.select_one('.alert.alert-danger.alert-dismissable.fade.in')
     if div_erro:
         mensagem = div_erro.get_text(" ", strip=True)
-        # O SICA valida a duplicidade; um ticket existente também é confirmação.
-        ja_pedido = re.search(r'gerado anteriormente|j[áa] (?:foi )?(?:pedido|solicitado|gerado)', mensagem, re.IGNORECASE)
-        negacao = re.search(r'\b(não|nao|nunca)\b', mensagem, re.IGNORECASE)
-        return bool(ja_pedido and not negacao), mensagem
+        # O SICA usa "não foi gerado" no cabeçalho até para tickets existentes.
+        # Interpretar apenas o motivo, preservando a mensagem inteira no relatório.
+        motivo = re.split(r'devido ao problema\s*:\s*', mensagem, flags=re.IGNORECASE)[-1]
+        motivo = motivo.strip().lstrip('×').strip()
+        ja_pedido = re.fullmatch(
+            r'(?:ticket\s+)?(?:gerado anteriormente|j[áa] (?:foi )?(?:pedido|solicitado|gerado))[.!\s]*',
+            motivo, re.IGNORECASE,
+        )
+        return bool(ja_pedido), mensagem
     
     # Procura mensagem de sucesso (alert-success)
     div_sucesso = soup.select_one('.alert.alert-success.alert-dismissable.fade.in')

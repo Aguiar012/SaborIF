@@ -5,6 +5,17 @@ from sistema_pedido import cliente_site as site
 
 
 class RetentativaSicaTests(unittest.TestCase):
+    def test_mensagem_completa_observada_no_sica_confirma_pedido(self):
+        mensagem = '× Que pena! O ticket de hoje nao foi gerado devido ao problema: Gerado anteriormente.'
+        html = '<div class="alert alert-danger alert-dismissable fade in">' + mensagem + '</div>'
+        self.assertEqual(site.interpretar_resposta_pedido(html), (True, mensagem))
+
+    def test_cabecalho_generico_nao_esconde_erros_reais(self):
+        for motivo in ('Prontuário inválido.', 'Ticket não foi gerado anteriormente.', 'Gerado anteriormente. Erro desconhecido.'):
+            mensagem = '× Que pena! O ticket de hoje nao foi gerado devido ao problema: ' + motivo
+            html = '<div class="alert alert-danger alert-dismissable fade in">' + mensagem + '</div>'
+            self.assertEqual(site.interpretar_resposta_pedido(html), (False, mensagem))
+
     def test_ticket_anterior_e_confirmacao(self):
         for mensagem in ('Gerado anteriormente', 'Ticket já foi pedido', 'Ticket já gerado'):
             with self.subTest(mensagem=mensagem):
