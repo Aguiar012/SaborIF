@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 from sistema_pedido.configuracao import URL_BANCO_DADOS
 from sistema_pedido.refeicoes import obter_refeicao
+from sistema_pedido.historico import consolidar_resultados
 
 
 CAMINHO_MIGRACAO_REFEICOES = (
@@ -107,6 +108,24 @@ def buscar_alunos_para_dia(
     except Exception as e:
         logging.error(f"❌ Erro no banco ao buscar alunos: {e}")
         raise
+
+def buscar_resultados_dia(data_pedido, refeicao='almoco') -> dict:
+    """Consulta todas as tentativas do dia/refeição, sem alterar o histórico."""
+    if not URL_BANCO_DADOS:
+        raise RuntimeError('Banco não configurado; confirmações desconhecidas.')
+    with psycopg.connect(URL_BANCO_DADOS) as conexao:
+        with conexao.cursor() as cursor:
+            cursor.execute('''
+                SELECT aluno_id, motivo FROM pedido
+                WHERE dia_pedido = %s AND refeicao = %s
+                ORDER BY id DESC
+            ''', (data_pedido, obter_refeicao(refeicao).nome))
+            historicos = {}
+            for aluno_id, motivo in cursor.fetchall():
+                historicos.setdefault(aluno_id, []).append(motivo)
+    return {aluno_id: consolidar_resultados(motivos)
+            for aluno_id, motivos in historicos.items()}
+
 
 def buscar_telefone_aluno(aluno_id: int) -> str | None:
     """
