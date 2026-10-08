@@ -15,13 +15,42 @@ from sistema_pedido.cliente_site import (
 from sistema_pedido.banco_dados import (
     buscar_alunos_para_dia, buscar_pratos_bloqueados,
     registrar_historico_pedido, buscar_cancelamento_direto,
-    buscar_telefone_aluno, garantir_estrutura_refeicoes
+    buscar_telefone_aluno, garantir_estrutura_refeicoes, buscar_resultados_dia
 )
 from sistema_pedido.servicos.email import enviar_email
 from sistema_pedido.servicos.whatsapp import notificar_administradores, enviar_mensagem_aluno
 
 class PrazoPerdido(RuntimeError):
     """Prazo encerrado: avisar somente pelo e-mail do relatório."""
+
+def conferir_execucao_atrasada(agora, data_pedido):
+    """Só alerta sobre pendências reais. Não envia pedidos nem mensagens no WhatsApp."""
+    try:
+        alunos = buscar_alunos_para_dia(
+            data_pedido.isoweekday(), REFEICAO_ATUAL,
+            PRONTUARIO_TESTE if MODO_TESTE else None,
+        )
+        resultados = buscar_resultados_dia(data_pedido, REFEICAO_ATUAL)
+    except Exception as erro:
+        mensagem = (f'Execução tardia para {data_pedido:%d/%m/%Y}: não foi possível '
+                    'consultar as confirmações no banco. Isso não comprova perda de pedidos. '
+                    'Nenhum pedido enviado nesta execução.')
+        enviar_email(f'ALERTA: verificação indisponível - {REFEICAO_ATUAL.titulo}', mensagem)
+        raise PrazoPerdido(mensagem) from erro
+    pendentes = [a for a in alunos if resultados.get(a['id']) not in
+                 ('CONFIRMADO', 'CANCELADO', 'DISPENSADO')]
+    if not pendentes:
+        logging.info('Execução tardia ignorada: %s alunos cobertos pelo histórico para %s (%s).',
+                     len(alunos), data_pedido, REFEICAO_ATUAL.nome)
+        return
+    mensagem = (f'Prazo perdido para {data_pedido:%d/%m/%Y}: '
+                f'{len(pendentes)} de {len(alunos)} alunos programados sem confirmação registrada. '
+                f'Execução iniciada em {agora:%d/%m/%Y %H:%M}. '
+                'Os demais possuem confirmação ou registro de cancelamento/bloqueio. '
+                'Nenhum pedido enviado nesta execução; o dia-alvo não foi alterado.')
+    enviar_email(f'ALERTA: prazo perdido - {REFEICAO_ATUAL.titulo}', mensagem)
+    raise PrazoPerdido(mensagem)
+
 
 def principal():
     """Função principal que gerencia todo o processo de pedidos."""
@@ -50,11 +79,8 @@ def principal():
     # 1. Calcula para qual data vamos fazer os pedidos
     data_pedido = data_alvo_pedido(agora)
     if not SIMULAR_PEDIDO and prazo_encerrado(agora):
-        mensagem = (f'Prazo perdido para {data_pedido:%d/%m/%Y}. '
-                    f'Execução iniciada em {agora:%d/%m/%Y %H:%M}. '
-                    'Nenhum pedido enviado; o dia-alvo não foi alterado.')
-        enviar_email(f'ALERTA: prazo perdido - {titulo_refeicao}', mensagem)
-        raise PrazoPerdido(mensagem)
+        conferir_execucao_atrasada(agora, data_pedido)
+        return
     if not SIMULAR_PEDIDO:
         garantir_estrutura_refeicoes()
     dia_semana_iso = data_pedido.isoweekday()
@@ -184,6 +210,16 @@ def principal():
                 if tentativa < TENTATIVAS_PEDIDO:
                     time.sleep(TEMPO_ESPERA_ERRO)
         
+        if 'PRAZO_PERDIDO' in mensagem_resultado:
+            # Uma segunda tentativa atrasada não invalida um ticket já confirmado.
+            try:
+                resultado_anterior = buscar_resultados_dia(data_pedido, REFEICAO_ATUAL).get(id_aluno)
+            except Exception:
+                resultado_anterior = None
+            if resultado_anterior == 'CONFIRMADO':
+                sucesso_pedido = True
+                mensagem_resultado = 'Confirmado em execução anterior; nova tentativa não enviada.'
+
         hora_fim = datetime.now(FUSO_HORARIO).strftime('%H:%M:%S')
         detalhes_execucao.append((prontuario, sucesso_pedido, mensagem_resultado, hora_inicio, hora_fim, tentativa))
     

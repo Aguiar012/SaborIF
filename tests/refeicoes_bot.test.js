@@ -10,6 +10,53 @@ import {
     obterRefeicao,
 } from "../whatsapp/bot/refeicoes.js";
 import { gerarImagemEmailCancelamento } from "../whatsapp/bot/renderizar_email.js";
+import { classificarMotivo, consolidarPedidos } from "../whatsapp/bot/historico.js";
+import fs from "node:fs";
+import { gerarCabecalho } from "../whatsapp/bot/logica_respostas.js";
+
+test("resumo mostra Ja Pedi para ticket existente mesmo apos erro posterior", () => {
+    const segunda = new Date();
+    const dia = segunda.getDay();
+    segunda.setDate(segunda.getDate() + (dia === 0 ? 1 : dia === 6 ? 2 : 1 - dia));
+    segunda.setHours(12, 0, 0, 0);
+    const registros = [
+        { dia_pedido: segunda, refeicao: "jantar", motivo: "ERRO_PEDIDO: timeout" },
+        { dia_pedido: segunda, refeicao: "jantar", motivo: "ERRO_PEDIDO: Que pena! O ticket nao foi gerado devido ao problema: Gerado anteriormente." },
+    ];
+    const mensagem = gerarCabecalho({ nome: "Teste", refeicao: "jantar" }, null, {
+        pedidos: consolidarPedidos(registros), diasPreferidos: [1],
+    });
+    assert.match(mensagem, /Já Pedi:\* Seg/);
+    assert.doesNotMatch(mensagem, /Sem confirmação/);
+});
+
+test("historico reconhece confirmacao antiga sem aceitar mensagem negativa", () => {
+    const texto = "ERRO_PEDIDO: × Que pena! O ticket de hoje nao foi gerado devido ao problema: Gerado anteriormente.";
+    assert.equal(classificarMotivo(texto).tipo, "PEDIU_OK");
+    for (const msg of ["não gerado anteriormente", "Ticket gerado anteriormente não encontrado", "prazo encerrado", "timeout"]) {
+        assert.equal(classificarMotivo(`ERRO_PEDIDO: ${msg}`).tipo, "ERRO_PEDIDO");
+    }
+});
+
+test("historico por dia e refeicao preserva sucesso e cancelamento", () => {
+    const p = (motivo, refeicao = "almoco", dia_pedido = "2026-10-08") => ({ motivo, refeicao, dia_pedido });
+    const ok = p("PEDIU_OK: Gerado anteriormente");
+    const erro = p("ERRO_PEDIDO: timeout");
+    const cancelado = p("CANCELAMENTO_EMAIL: enviado");
+    assert.deepEqual(consolidarPedidos([erro, ok]), [ok]);
+    assert.deepEqual(consolidarPedidos([cancelado, ok]), [cancelado]);
+    assert.deepEqual(consolidarPedidos([ok, cancelado]), [ok]);
+    const jantar = p("ERRO_PEDIDO: timeout", "jantar");
+    const sexta = p("ERRO_PEDIDO: timeout", "almoco", "2026-10-09");
+    assert.deepEqual(consolidarPedidos([erro, jantar, sexta, ok]), [ok, jantar, sexta]);
+    assert.deepEqual(consolidarPedidos([]), []);
+});
+
+test("consultas do bot nao descartam tickets gerados anteriormente", () => {
+    const codigo = fs.readFileSync(new URL("../whatsapp/bot/logica_respostas.js", import.meta.url), "utf8");
+    assert.doesNotMatch(codigo, /NOT ILIKE '%anteriormente%'/);
+    assert.equal((codigo.match(/return consolidarPedidos\(rows\)/g) || []).length, 3);
+});
 
 
 test("reconhece almoco com acento e codigo", () => {

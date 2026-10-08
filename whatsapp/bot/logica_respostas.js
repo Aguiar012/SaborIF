@@ -4,6 +4,7 @@ import pkg from "pg";
 const { Pool } = pkg;
 import nodemailer from "nodemailer";
 import { gerarImagemEmailCancelamento } from "./renderizar_email.js";
+import { classificarMotivo, consolidarPedidos } from "./historico.js";
 import {
     analisarComandoCancelamento,
     criarMensagemConfirmacaoTroca,
@@ -220,33 +221,6 @@ function obterNomeDiaSemana(dataOuString) {
     return NOMES_DIAS_SEMANA[d.getDay()];
 }
 
-function classificarMotivo(motivoBruto = "") {
-    const completo = String(motivoBruto || "");
-    const idx = completo.indexOf(":");
-    const tag = (idx >= 0 ? completo.slice(0, idx) : completo).trim();
-    const detalhe = idx >= 0 ? completo.slice(idx + 1).trim() : "";
-    const tagNorm = normalizar(tag);
-
-    let tipo = "OUTRO";
-    const motivoCompleto = normalizar(completo);
-    if (tagNorm.startsWith("nao_pediu") || tagNorm.startsWith("nao pediu")) {
-        tipo = "NAO_PEDIU";
-    } else if (tagNorm.startsWith("pediu_ok")) {
-        tipo = "PEDIU_OK";
-    } else if (tagNorm.startsWith("erro_pedido")) {
-        // Se o erro diz "ticket gerado" ou "gerado anteriormente", na verdade o pedido ja foi feito
-        if (motivoCompleto.includes("ticket gerado") || motivoCompleto.includes("gerado anteriormente")) {
-            tipo = "PEDIU_OK";
-        } else {
-            tipo = "ERRO_PEDIDO";
-        }
-    } else if (motivoCompleto.includes("ticket gerado") || motivoCompleto.includes("gerado anteriormente")) {
-        tipo = "PEDIU_OK";
-    }
-
-    return { tipo, detalhe, bruto: completo };
-}
-
 // ---- MENU PRINCIPAL ----
 
 // Calcula segunda-feira da semana atual (em horario local)
@@ -259,7 +233,7 @@ function obterSegundaDaSemana(agora = new Date()) {
     return d;
 }
 
-function gerarCabecalho(aluno, pratoAtual, dadosSemana = null) {
+export function gerarCabecalho(aluno, pratoAtual, dadosSemana = null) {
     if (!aluno) {
         return "*IFSP Pirituba - Refeições*\n\n";
     }
@@ -319,7 +293,7 @@ function gerarCabecalho(aluno, pratoAtual, dadosSemana = null) {
                 const { tipo } = classificarMotivo(pedido.motivo);
                 if (tipo === "PEDIU_OK") {
                     diasPediu.push(`${nomeDia}`);
-                } else if (tipo === "NAO_PEDIU" || pedido.motivo.includes("CANCELADO")) {
+                } else if (tipo === "NAO_PEDIU" || tipo === "CANCELADO") {
                     diasNaoVou.push(nomeDia);
                 } else {
                     diasErro.push(`${nomeDia}`);
@@ -816,20 +790,21 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
     async function buscarUltimoPedido(c, alunoId) {
         const { rows } = await c.query(
             `SELECT dia_pedido, motivo, refeicao FROM pedido
-        WHERE aluno_id = $1 AND motivo NOT ILIKE '%anteriormente%' AND motivo NOT LIKE '%Final%'
-        ORDER BY dia_pedido DESC, id DESC LIMIT 1`, [alunoId]
+        WHERE aluno_id = $1 AND motivo NOT LIKE '%Final%'
+          AND dia_pedido = (SELECT MAX(dia_pedido) FROM pedido WHERE aluno_id = $1)
+        ORDER BY dia_pedido DESC, id DESC`, [alunoId]
         );
-        return rows[0] || null;
+        return consolidarPedidos(rows)[0] || null;
     }
 
     async function buscarUltimosPedidos(c, alunoId) {
         const { rows } = await c.query(
             `SELECT dia_pedido, motivo, refeicao FROM pedido
         WHERE aluno_id = $1 AND dia_pedido >= (CURRENT_DATE - INTERVAL '7 days')
-          AND motivo NOT ILIKE '%anteriormente%' AND motivo NOT LIKE '%Final%'
+          AND motivo NOT LIKE '%Final%'
         ORDER BY dia_pedido DESC, id DESC`, [alunoId]
         );
-        return rows;
+        return consolidarPedidos(rows);
     }
 
     // Busca pedidos da semana visualizada (seg a sex) para a tabela visual
@@ -847,12 +822,11 @@ export function criarFluxoConversa({ diretorioDados = "/app/data", urlBanco, log
              WHERE aluno_id = $1
                AND dia_pedido >= $2
                AND dia_pedido <= $3
-               AND motivo NOT ILIKE '%anteriormente%'
                AND motivo NOT LIKE '%Final%'
              ORDER BY dia_pedido ASC, id DESC`,
             [alunoId, dataIsoUTC(segunda), dataIsoUTC(sexta)]
         );
-        return rows;
+        return consolidarPedidos(rows);
     }
 
     async function obterPratoAtual(c) {
@@ -1206,7 +1180,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
                 const data = formatarDataBR(p.dia_pedido);
                 const { tipo, detalhe } = classificarMotivo(p.motivo);
                 const refeicao = obterRefeicao(p.refeicao || "almoco").titulo;
-                let desc = tipo === "PEDIU_OK" ? "[OK]" : (tipo === "NAO_PEDIU" ? "[!]" : "[X]");
+                let desc = tipo === "PEDIU_OK" ? "[OK]" : (["NAO_PEDIU", "CANCELADO"].includes(tipo) ? "[!]" : "[X]");
                 return `• ${data} (${refeicao}): ${desc} ${detalhe || ""}`;
             });
             corpo += linhas.join("\n");
@@ -1775,7 +1749,7 @@ function menuDiasSemana(motivo, refeicao = "almoco") {
                            dataIsoUTC(p.dia_pedido) === diaIso
                        );
                        const diasDaRefeicao = dadosSemana.diasPreferidos || [];
-                       const statusIcon = pedido ? (classificarMotivo(pedido.motivo).tipo === "PEDIU_OK" ? "✅" : (classificarMotivo(pedido.motivo).tipo === "NAO_PEDIU" || pedido.motivo.includes("CANCELADO") ? "❌" : "⚠️")) : (diasDaRefeicao.includes(i + 1) ? "📅" : "❌");
+                       const statusIcon = pedido ? (classificarMotivo(pedido.motivo).tipo === "PEDIU_OK" ? "✅" : (["NAO_PEDIU", "CANCELADO"].includes(classificarMotivo(pedido.motivo).tipo) ? "❌" : "⚠️")) : (diasDaRefeicao.includes(i + 1) ? "📅" : "❌");
                        listaVisual += `\n${statusIcon} ${nomeDias[i]} ${formatarDataBR(dataDodia)}`;
                    }
                }
